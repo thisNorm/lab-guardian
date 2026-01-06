@@ -30,7 +30,7 @@
 ## 📸 Dashboard Preview
 
 <div align="center">
-  <img src="[https://github.com/thisNorm/lab-guardian/blob/main/simul.png)" alt="Dashboard Screen" width="100%" />
+  <img src="https://raw.githubusercontent.com/thisNorm/lab-guardian/main/simul.png" alt="Dashboard Screen" width="100%" />
 </div>
 
 ---
