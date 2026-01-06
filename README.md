@@ -46,18 +46,16 @@ graph LR
     E -- Command --> C
 ```
 ---
-🚀 Getting Started
+## 🚀 Getting Started
 이 프로젝트는 Server(Python)와 Client(React)로 구성되어 있습니다.
 
-1. Prerequisites
-Node.js 18+
+### 1. Prerequisites
++ Node.js 18+
++ Python 3.10+
++ Webcam (for testing)
 
-Python 3.10+
-
-Webcam (for testing)
-
-2. Server Setup (Back-end)
-```mermaid
+### 2. Server Setup (Back-end)
+```bash
 # 1. 폴더 이동
 cd lab-guardian-server
 
@@ -72,8 +70,8 @@ pip install -r requirements.txt
 # 4. 서버 실행
 python main.py
 ```
-3. Client Setup (Front-end)
-```mermaid
+### 3. Client Setup (Front-end)
+```bash
 # 1. 폴더 이동
 cd lab-guardian-web
 
@@ -83,9 +81,9 @@ npm install
 # 3. 웹 서버 실행
 npm run dev
 ```
-4. Robot Simulation (Test Mode)
+### 4. Robot Simulation (Test Mode)
 로봇 하드웨어가 없어도 웹캠으로 테스트할 수 있습니다.
-```mermaid
+```bash
 # 새 터미널에서 실행
 cd lab-guardian-server
 python dummy_robot.py
@@ -93,8 +91,8 @@ python dummy_robot.py
 
 ---
 
-📂 Project Structure
-```mermaid
+## 📂 Project Structure
+```bash
 root/
 ├── lab-guardian-server/   # Backend (FastAPI)
 │   ├── main.py            # API Server & Streaming Logic
@@ -110,7 +108,8 @@ root/
 
 ---
 
-🛠️ Troubleshooting
+## 🛠️ Troubleshooting
+
 Q. 카메라가 켜지지 않고 멈춰있어요.
 
 dummy_robot.py 파일에서 cv2.VideoCapture(0, cv2.CAP_DSHOW) 옵션을 추가하거나, 인덱스 번호를 1로 변경해 보세요.
