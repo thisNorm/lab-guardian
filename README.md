@@ -30,7 +30,7 @@
 ## 📸 Dashboard Preview
 
 <div align="center">
-  <img src="https://via.placeholder.com/800x450.png?text=ETRI+Lab+Guardian+Dashboard+Preview" alt="Dashboard Screen" width="100%" />
+  <img src="[https://via.placeholder.com/800x450.png?text=ETRI+Lab+Guardian+Dashboard+Preview](https://github.com/thisNorm/lab-guardian/blob/main/simul.png)" alt="Dashboard Screen" width="100%" />
 </div>
 
 ---
