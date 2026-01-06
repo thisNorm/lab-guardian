@@ -46,46 +46,51 @@ graph LR
     E -- Command --> C
 ```
 ---
-## 🚀 Getting Started
-이 프로젝트는 Server(Python)와 Client(React)로 구성되어 있습니다.
+## 🚀 Getting Started (통합 실행 가이드)
+전체 시스템을 구동하기 위해서는 총 3개의 터미널(CMD)이 필요합니다. 루트 폴더에서 터미널 3개를 열고, 각 터미널에서 아래 명령어를 순서대로 실행해 주세요.
 
-### 1. Prerequisites
-+ Node.js 18+
-+ Python 3.10+
-+ Webcam (for testing)
+### 🖥️ Terminal 1: 웹 대시보드 (Frontend)
+React 웹 애플리케이션을 실행합니다.
 
-### 2. Server Setup (Back-end)
 ```bash
-# 1. 폴더 이동
-cd lab-guardian-server
-
-# 2. 가상환경 생성 및 활성화
-python -m venv venv
-source venv/bin/activate  # Windows: .\venv\Scripts\activate
-
-# 3. 라이브러리 설치
-pip install -r requirements.txt
-# 또는: pip install fastapi uvicorn[standard] opencv-python python-multipart numpy requests
-
-# 4. 서버 실행
-python main.py
-```
-### 3. Client Setup (Front-end)
-```bash
-# 1. 폴더 이동
+# 1. 웹 폴더로 이동
 cd lab-guardian-web
 
-# 2. 의존성 설치
+# 2. 의존성 설치 (최초 1회)
 npm install
 
-# 3. 웹 서버 실행
+# 3. 개발 서버 실행
 npm run dev
 ```
-### 4. Robot Simulation (Test Mode)
-로봇 하드웨어가 없어도 웹캠으로 테스트할 수 있습니다.
+### 🧠 Terminal 2: 관제 서버 (Backend)
+FastAPI 서버를 실행하여 로봇의 신호를 받습니다.
 ```bash
-# 새 터미널에서 실행
+# 1. 서버 폴더로 이동
 cd lab-guardian-server
+
+# 2. 가상환경 생성 (최초 1회)
+python -m venv venv
+
+# 3. 가상환경 활성화 (Windows)
+.\venv\Scripts\activate
+
+# 4. 필수 패키지 설치
+pip install -r requirements.txt
+
+# 5. 메인 서버 실행
+python main.py
+```
+### 🤖 Terminal 3: 로봇 시뮬레이터 (Robot)
+카메라(웹캠)를 통해 영상을 서버로 전송합니다.
+```bash
+# 1. 서버 폴더로 이동
+cd lab-guardian-server
+
+# 2. 가상환경 활성화 (Windows)
+# (주의: 서버와 별개로 이 터미널에서도 가상환경을 켜야 합니다)
+.\venv\Scripts\activate
+
+# 3. 로봇 시뮬레이터 실행
 python dummy_robot.py
 ```
 
@@ -97,6 +102,7 @@ root/
 ├── lab-guardian-server/   # Backend (FastAPI)
 │   ├── main.py            # API Server & Streaming Logic
 │   ├── dummy_robot.py     # Robot Simulator (Client Logic)
+│   ├── requirements.txt   # Python Dependency List
 │   └── venv/              # Python Virtual Environment
 │
 └── lab-guardian-web/      # Frontend (React + Vite)
@@ -123,4 +129,4 @@ Q. MUI Grid 관련 오류가 떠요.
 MUI v6부터는 <Grid item> 대신 <Grid size={{ xs: 12 }}> 형식을 사용해야 합니다. 또는 Grid2 컴포넌트를 사용하세요.
 
 ---
-<div align="center"> <sub>Built with ❤️ by Team ETRI Lab Guardian</sub> </div>
+<div align="center"> <sub>Built with by 이민하 @ 자율형IoT연구실</sub> </div>
