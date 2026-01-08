@@ -1,16 +1,23 @@
-# 가상환경 제외
+# [.gitignore]
+
+# 파이썬 가상환경 및 캐시
 venv/
 .venv/
-lab-guardian-server/venv/
-lab-guardian-algorithm/venv/
-
-# 파이썬 캐시 및 컴파일 파일 제외
+**/venv/
 **/__pycache__/
 *.pyc
 
-# IDE 설정 제외
-.vscode/
-
+# 노드 패키지 (모든 하위 폴더 포함)
+**/node_modules/
 package-lock.json
-package.json
-node_modules/
+
+# 로그 파일
+*.log
+
+# OS 설정 파일
+.DS_Store
+Thumbs.db
+
+# IDE 설정
+.vscode/
+.idea/
