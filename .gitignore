@@ -1,0 +1,16 @@
+# 가상환경 제외
+venv/
+.venv/
+lab-guardian-server/venv/
+lab-guardian-algorithm/venv/
+
+# 파이썬 캐시 및 컴파일 파일 제외
+**/__pycache__/
+*.pyc
+
+# IDE 설정 제외
+.vscode/
+
+package-lock.json
+package.json
+node_modules/
