@@ -5,6 +5,7 @@ import { CctvController } from './cctv/cctv.controller';
 import { CctvService } from './cctv/cctv.service';
 import { RobotController } from './robot/robot.controller';
 import { MonitoringGateway } from './gateway/monitoring.gateway';
+import { PrismaService } from './prisma.service';
 
 @Module({
   imports: [],
@@ -16,7 +17,8 @@ import { MonitoringGateway } from './gateway/monitoring.gateway';
   providers: [
     AppService, 
     CctvService, 
-    MonitoringGateway
+    MonitoringGateway,
+    PrismaService
   ],
 })
 export class AppModule {}

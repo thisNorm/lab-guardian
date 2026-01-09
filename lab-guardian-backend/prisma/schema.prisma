@@ -5,16 +5,15 @@ generator client {
 }
 
 datasource db {
-  // ✅ provider는 여기에 있어야 합니다!
   provider = "sqlite"
-  
-  // ❌ url = "file:./dev.db" <-- 이 줄만 지웁니다.
+  // ✅ v5에서는 여기에 url을 적어도 에러가 안 납니다! (가장 편함)
+  url      = "file:./dev.db"
 }
 
 model EventLog {
   id        Int      @id @default(autoincrement())
   createdAt DateTime @default(now())
-  cctvLog   String?  
-  robotLog  String?  
-  camId     String   
+  cctvLog   String?
+  robotLog  String?
+  camId     String
 }
