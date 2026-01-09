@@ -1,189 +1,227 @@
-import { useState, useEffect, useRef } from 'react';
-import axios from 'axios'; 
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { io, Socket } from "socket.io-client";
-import { NETWORK_CONFIG } from './common/config'; // 확장자 .ts 제거 (표준)
-
+import { NETWORK_CONFIG } from './common/config';
 import { 
-  AppBar, Toolbar, Typography, Container, Grid, Paper, 
-  Button, Card, CardContent, Chip, Stack, Box,
-  List, ListItem, ListItemText, Divider, CssBaseline
+  AppBar, Toolbar, Typography, Paper, Button, Card, Stack, Box,
+  List, ListItem, ListItemText, CssBaseline, keyframes,
+  IconButton, TextField, Dialog, DialogTitle, DialogContent, DialogActions 
 } from '@mui/material';
+import Grid from '@mui/material/Grid';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import SecurityIcon from '@mui/icons-material/Security';
-import WarningAmberIcon from '@mui/icons-material/WarningAmber';
-import AutoModeIcon from '@mui/icons-material/AutoMode';
+import DeleteIcon from '@mui/icons-material/Delete';
+import AddIcon from '@mui/icons-material/Add';
+import FullscreenIcon from '@mui/icons-material/Fullscreen';
+import FullscreenExitIcon from '@mui/icons-material/FullscreenExit';
 
-// ✅ MUI Grid의 유효한 값들을 타입으로 지정
-type GridSize = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12;
+const flashRed = keyframes`
+  0% { border-color: #ff1744; box-shadow: 0 0 5px #ff1744; }
+  50% { border-color: #b2102f; box-shadow: 0 0 30px #ff1744; }
+  100% { border-color: #ff1744; box-shadow: 0 0 5px #ff1744; }
+`;
 
-const darkTheme = createTheme({
-  palette: {
-    mode: 'dark',
-    primary: { main: '#90caf9' },
-    secondary: { main: '#f48fb1' },
-    background: { default: '#0a1929', paper: '#102030' },
-  },
-});
+const darkTheme = createTheme({ palette: { mode: 'dark', background: { default: '#050a10', paper: '#0c141d' } } });
 
-type RobotStatus = 'IDLE' | 'PATROL' | 'DANGER' | 'OFFLINE';
-
-interface Robot {
-  id: number | string;
-  name: string;
-  status: RobotStatus;
-}
+type DeviceStatus = 'IDLE' | 'PATROL' | 'DANGER';
+interface Device { id: string; name: string; status: DeviceStatus; type: 'CCTV' | 'ROBOT'; }
 
 function App() {
-  const [robots, setRobots] = useState<Robot[]>([]);
-  const [logs, setLogs] = useState<string[]>([]);
+  const [devices, setDevices] = useState<Device[]>([]);
+  const [cctvDisplayLogs, setCctvDisplayLogs] = useState<string[]>([]);
+  const [robotDisplayLogs, setRobotDisplayLogs] = useState<string[]>([]);
+  const [logHeight, setLogHeight] = useState(200);
+  const isResizing = useRef(false);
+  
+  const [maximizedCctv, setMaximizedCctv] = useState<string | null>(null);
+  const [maximizedRobot, setMaximizedRobot] = useState<string | null>(null);
+
+  const [open, setOpen] = useState(false);
+  const [targetType, setTargetType] = useState<'CCTV' | 'ROBOT'>('CCTV');
+  const [newName, setNewName] = useState('');
   const socketRef = useRef<Socket | null>(null);
+  const alertTimers = useRef<{ [key: string]: NodeJS.Timeout }>({});
 
-  const addLog = (msg: string) => {
-    const time = new Date().toLocaleTimeString();
-    setLogs(prev => [`[${time}] ${msg}`, ...prev]);
-  };
-
-  useEffect(() => {
-    addLog("시스템 모니터링 시작...");
-    
-    // 1. 초기 로봇 목록 로드
-    axios.get(`${NETWORK_CONFIG.NEST_API_URL}/api/robots`)
-      .then(res => setRobots(res.data))
-      .catch(() => addLog("⚠️ 백엔드 서버 연결 실패"));
-
-    // 2. 소켓 연결
-    socketRef.current = io(NETWORK_CONFIG.NEST_API_URL);
-    
-    socketRef.current.on('alarm_event', (data: any) => {
-      addLog(`🚨 감지 알람: ${data.message} (${data.cam_id})`);
-      
-      setRobots(prev => prev.map(robot => 
-        // ID 매칭 시 'Robot_' 접두사 제거 로직 포함
-        String(robot.id) === String(data.cam_id).replace('Robot_', '') 
-        ? { ...robot, status: 'DANGER' } : robot
-      ));
-    });
-
-    return () => { socketRef.current?.disconnect(); };
+  const startResizing = useCallback(() => { isResizing.current = true; document.body.style.cursor = 'row-resize'; }, []);
+  const stopResizing = useCallback(() => { isResizing.current = false; document.body.style.cursor = 'default'; }, []);
+  const resizeLogs = useCallback((e: MouseEvent) => {
+    if (!isResizing.current) return;
+    const newHeight = window.innerHeight - e.clientY;
+    if (newHeight > 80 && newHeight < window.innerHeight * 0.8) setLogHeight(newHeight);
   }, []);
 
-  // ✅ 오버로드 오류 해결: 반환 타입을 GridSize로 명시
-  const getGridSize = (total: number): GridSize => {
-    if (total === 1) return 12;
-    if (total === 2) return 6;
-    return 4; // 3개 이상일 때 한 줄에 3개씩
+  useEffect(() => {
+    window.addEventListener('mousemove', resizeLogs);
+    window.addEventListener('mouseup', stopResizing);
+    socketRef.current = io(`${NETWORK_CONFIG.NEST_API_URL}/monitoring`, { transports: ['websocket'] });
+    
+    socketRef.current.on('alarm_event', (data: { cam_id: string; message: string }) => {
+      setDevices((prev: Device[]) => {
+        const updated = prev.map(d => d.id === data.cam_id ? { ...d, status: 'DANGER' as DeviceStatus } : d);
+        const target = updated.find(d => d.id === data.cam_id);
+        if (target) {
+          const time = new Date().toLocaleTimeString();
+          const log = `[${time}] 🚨 ${data.message}`;
+          if (target.type === 'CCTV') setCctvDisplayLogs(p => [log, ...p].slice(0, 50));
+          else setRobotDisplayLogs(p => [log, ...p].slice(0, 50));
+
+          if (alertTimers.current[data.cam_id]) clearTimeout(alertTimers.current[data.cam_id]);
+          alertTimers.current[data.cam_id] = setTimeout(() => {
+            setDevices(curr => curr.map(d => d.id === data.cam_id ? { ...d, status: 'IDLE' as DeviceStatus } : d));
+          }, 10000);
+        }
+        return updated;
+      });
+    });
+
+    return () => { 
+      window.removeEventListener('mousemove', resizeLogs); 
+      window.removeEventListener('mouseup', stopResizing); 
+      socketRef.current?.disconnect();
+    };
+  }, [resizeLogs, stopResizing]);
+
+  const handleSave = () => {
+    const isCctv = targetType === 'CCTV' || newName.toLowerCase().includes('cctv');
+    setDevices(prev => [...prev, { id: newName, name: newName, status: 'IDLE', type: isCctv ? 'CCTV' : 'ROBOT' }]);
+    setOpen(false); setNewName('');
   };
 
-  const getVideoHeight = (total: number) => total === 1 ? '65vh' : (total <= 2 ? 400 : 250);
-
-  const RobotCard = ({ robot, count }: { robot: Robot, count: number }) => (
+  const DeviceCard = ({ dev, isMaximized, onMaximize }: { dev: Device, isMaximized: boolean, onMaximize: () => void }) => (
     <Card sx={{ 
-      height: '100%', 
-      border: robot.status === 'DANGER' ? '3px solid #ff1744' : '1px solid #333',
-      boxShadow: robot.status === 'DANGER' ? '0 0 15px rgba(255, 23, 68, 0.5)' : 'none'
+      height: '100%', width: '100%',
+      border: dev.status === 'DANGER' ? '4px solid #ff1744' : 'none',
+      animation: dev.status === 'DANGER' ? `${flashRed} 1s infinite` : 'none',
+      position: 'relative', borderRadius: isMaximized ? 0 : 2,
+      overflow: 'hidden', bgcolor: '#000'
     }}>
-      <CardContent>
-        <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1}>
-          <Stack direction="row" spacing={1} alignItems="center">
-            <Typography variant="h6">🤖 {robot.name}</Typography>
-            {robot.status === 'PATROL' && <Chip icon={<AutoModeIcon />} label="순찰 중" color="success" size="small" />}
-            {robot.status === 'DANGER' && <Chip icon={<WarningAmberIcon />} label="위험" color="error" size="small" />}
-            {robot.status === 'IDLE' && <Chip label="대기" color="primary" variant="outlined" size="small" />}
-          </Stack>
-        </Stack>
-        
-        <Box sx={{ 
-            bgcolor: 'black', height: getVideoHeight(count), 
-            display: 'flex', alignItems: 'center', justifyContent: 'center', 
-            borderRadius: 1, mb: 2, overflow: 'hidden'
-          }}>
-          {/* 알고리즘 서버(3000)에서 분석된 영상을 스트리밍 */}
-          <img 
-            src={`${NETWORK_CONFIG.ALGO_API_URL}/video_feed/${robot.id}`} 
-            alt={`${robot.name} Stream`}
-            style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-            onError={(e) => { e.currentTarget.src = "https://via.placeholder.com/640x480?text=No+Signal"; }}
-          />
+      {/* 🛠️ 컨트롤 오버레이 */}
+      <Box sx={{ 
+        position: 'absolute', top: 0, left: 0, right: 0, 
+        p: '4px 8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', 
+        bgcolor: 'rgba(0,0,0,0.3)', zIndex: 10,
+        opacity: isMaximized ? 0 : 1, '&:hover': { opacity: 1 }, transition: 'opacity 0.3s'
+      }}>
+        <Typography variant="caption" sx={{ fontWeight: 'bold', color: '#fff' }}>{dev.name}</Typography>
+        <Box>
+          <IconButton size="small" onClick={onMaximize} sx={{ color: 'white' }}>
+            {isMaximized ? <FullscreenExitIcon /> : <FullscreenIcon />}
+          </IconButton>
+          {!isMaximized && (
+            <IconButton size="small" onClick={() => setDevices(prev => prev.filter(d => d.id !== dev.id))} sx={{ color: '#ff5252' }}>
+              <DeleteIcon sx={{ fontSize: 16 }} />
+            </IconButton>
+          )}
         </Box>
+      </Box>
 
-        <Stack direction="row" spacing={1}>
-          <Button variant="contained" color="success" fullWidth 
-            onClick={() => { 
-              axios.post(`${NETWORK_CONFIG.NEST_API_URL}/api/robot/command/${robot.id}`, {action: 'start'}); 
-              addLog(`${robot.name} 출동 명령`); 
-            }}>
-            출동
-          </Button>
-          <Button variant="outlined" color="error" fullWidth 
-            onClick={() => { 
-              axios.post(`${NETWORK_CONFIG.NEST_API_URL}/api/robot/command/${robot.id}`, {action: 'stop'}); 
-              addLog(`${robot.name} 복귀 명령`); 
-            }}>
-            복귀
-          </Button>
-        </Stack>
-      </CardContent>
+      {/* 📺 영상 본체: cover 속성을 사용하여 여백 없이 꽉 채움 */}
+      <Box sx={{ width: '100%', height: '100%' }}>
+        <img 
+          src={`${NETWORK_CONFIG.ALGO_API_URL}/video_feed/${dev.id}`} 
+          style={{ 
+            width: '100%', 
+            height: '100%', 
+            // 💡 핵심: cover를 사용하여 빈틈없이 채우되, 찌그러지지 않게 함
+            objectFit: isMaximized ? 'cover' : 'contain', 
+            display: 'block'
+          }} 
+        />
+        {dev.status === 'DANGER' && (
+          <Box sx={{ position: 'absolute', inset: 0, border: '6px solid rgba(255, 23, 68, 0.5)', pointerEvents: 'none' }} />
+        )}
+      </Box>
+
+      {isMaximized && (
+        <IconButton 
+          onClick={onMaximize} 
+          sx={{ position: 'absolute', top: 10, right: 10, bgcolor: 'rgba(0,0,0,0.4)', color: 'white', '&:hover': { bgcolor: 'rgba(0,0,0,0.8)' }, zIndex: 11 }}
+        >
+          <FullscreenExitIcon />
+        </IconButton>
+      )}
     </Card>
   );
 
   return (
     <ThemeProvider theme={darkTheme}>
       <CssBaseline />
-      <AppBar position="static" color="transparent" elevation={0} sx={{ borderBottom: '1px solid #333' }}>
-        <Toolbar>
-          <SecurityIcon sx={{ mr: 2, color: '#90caf9' }} />
-          <Typography variant="h6" sx={{ flexGrow: 1, fontWeight: 'bold' }}>Lab Guardian Dashboard</Typography>
-          <Stack direction="row" spacing={2} alignItems="center">
-            <Chip label={`Active: ${robots.length}`} color="default" size="small" />
-            <Chip label="System: Live" color="success" size="small" variant="outlined" />
-          </Stack>
-        </Toolbar>
-      </AppBar>
+      <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
+        <AppBar position="static" sx={{ bgcolor: '#000' }} elevation={0}>
+          <Toolbar variant="dense">
+            <SecurityIcon sx={{ mr: 2, color: '#90caf9' }} />
+            <Typography variant="h6" sx={{ fontSize: '0.9rem', fontWeight: 'bold' }}>LAB GUARDIAN HUB</Typography>
+          </Toolbar>
+        </AppBar>
 
-      <Container maxWidth="xl" sx={{ mt: 4 }}>
-        <Grid container spacing={3}>
-          <Grid item xs={12} md={9}>
-            <Grid container spacing={2}>
-              {robots.length === 0 ? (
-                <Grid item xs={12}>
-                  <Paper sx={{ p: 10, textAlign: 'center', borderStyle: 'dashed', borderColor: '#444' }}>
-                    <Typography color="gray">연결된 로봇 또는 카메라가 없습니다.</Typography>
-                  </Paper>
-                </Grid>
-              ) : (
-                robots.map((robot) => (
-                  <Grid item key={robot.id} xs={12} md={getGridSize(robots.length)}>
-                    <RobotCard robot={robot} count={robots.length} />
-                  </Grid>
-                ))
-              )}
-            </Grid>
-          </Grid>
+        <Box sx={{ flexGrow: 1, display: 'flex', overflow: 'hidden' }}>
+          {/* CCTV 구역 */}
+          <Box sx={{ width: '50%', display: 'flex', flexDirection: 'column', borderRight: '1px solid #444' }}>
+            {!maximizedCctv && (
+              <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ p: 1, bgcolor: '#0c141d' }}>
+                <Typography variant="overline" color="primary" sx={{ fontWeight: 'bold' }}>Static CCTV</Typography>
+                <Button size="small" startIcon={<AddIcon />} onClick={() => { setTargetType('CCTV'); setOpen(true); }}>Add</Button>
+              </Stack>
+            )}
+            <Box sx={{ flexGrow: 1, p: maximizedCctv ? 0 : 1.5 }}>
+              <Grid container spacing={maximizedCctv ? 0 : 1.5} sx={{ height: '100%' }}>
+                {devices.filter(d => d.type === 'CCTV').map(dev => {
+                  if (maximizedCctv && maximizedCctv !== dev.id) return null;
+                  return (
+                    <Grid item xs={maximizedCctv ? 12 : 6} key={dev.id} sx={{ height: maximizedCctv ? '100%' : '240px' }}>
+                      <DeviceCard dev={dev} isMaximized={maximizedCctv === dev.id} onMaximize={() => setMaximizedCctv(maximizedCctv === dev.id ? null : dev.id)} />
+                    </Grid>
+                  );
+                })}
+              </Grid>
+            </Box>
+          </Box>
 
-          <Grid item xs={12} md={3}>
-            <Paper sx={{ height: '80vh', p: 2, overflow: 'auto', bgcolor: '#0a141d' }}>
-              <Typography variant="h6" gutterBottom>Real-time Logs</Typography>
-              <Divider sx={{ mb: 2 }} />
-              <List dense>
-                {logs.map((log, index) => (
-                  <ListItem key={index} disableGutters>
-                    <ListItemText 
-                      primary={log} 
-                      primaryTypographyProps={{ 
-                        style: { 
-                          fontFamily: 'monospace', 
-                          fontSize: '0.85rem',
-                          color: log.includes('🚨') ? '#ff5252' : '#ccc'
-                        } 
-                      }} 
-                    />
-                  </ListItem>
-                ))}
-              </List>
-            </Paper>
-          </Grid>
-        </Grid>
-      </Container>
+          {/* 로봇 구역 */}
+          <Box sx={{ width: '50%', display: 'flex', flexDirection: 'column' }}>
+            {!maximizedRobot && (
+              <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ p: 1, bgcolor: '#0c141d' }}>
+                <Typography variant="overline" color="secondary" sx={{ fontWeight: 'bold' }}>Mobile Robot</Typography>
+                <Button size="small" color="secondary" startIcon={<AddIcon />} onClick={() => { setTargetType('ROBOT'); setOpen(true); }}>Add</Button>
+              </Stack>
+            )}
+            <Box sx={{ flexGrow: 1, p: maximizedRobot ? 0 : 1.5 }}>
+              <Grid container spacing={maximizedRobot ? 0 : 1.5} sx={{ height: '100%' }}>
+                {devices.filter(d => d.type === 'ROBOT').map(dev => {
+                  if (maximizedRobot && maximizedRobot !== dev.id) return null;
+                  return (
+                    <Grid item xs={maximizedRobot ? 12 : 6} key={dev.id} sx={{ height: maximizedRobot ? '100%' : '240px' }}>
+                      <DeviceCard dev={dev} isMaximized={maximizedRobot === dev.id} onMaximize={() => setMaximizedRobot(maximizedRobot === dev.id ? null : dev.id)} />
+                    </Grid>
+                  );
+                })}
+              </Grid>
+            </Box>
+          </Box>
+        </Box>
+
+        {/* 하단 로그 */}
+        <Box sx={{ height: `${logHeight}px`, position: 'relative', display: 'flex', borderTop: '2px solid #444', bgcolor: '#050505' }}>
+          <Box onMouseDown={startResizing} sx={{ position: 'absolute', top: -5, left: 0, right: 0, height: '10px', cursor: 'row-resize', zIndex: 20 }} />
+          <Paper sx={{ width: '50%', p: 1.5, bgcolor: 'transparent', borderRight: '1px solid #333', overflow: 'hidden' }} elevation={0}>
+            <Typography variant="caption" color="error" sx={{ fontWeight: 'bold' }}>CCTV SECURITY LOGS</Typography>
+            <List dense sx={{ height: 'calc(100% - 25px)', overflowY: 'auto', mt: 1 }}>
+              {cctvDisplayLogs.map((log, i) => <ListItem key={i} sx={{ py: 0 }}><ListItemText primary={log} primaryTypographyProps={{ fontSize: '0.7rem', color: '#ff1744', fontFamily: 'monospace' }} /></ListItem>)}
+            </List>
+          </Paper>
+          <Paper sx={{ width: '50%', p: 1.5, bgcolor: 'transparent', overflow: 'hidden' }} elevation={0}>
+            <Typography variant="caption" color="primary" sx={{ fontWeight: 'bold' }}>ROBOT OPERATION LOGS</Typography>
+            <List dense sx={{ height: 'calc(100% - 25px)', overflowY: 'auto', mt: 1 }}>
+              {robotDisplayLogs.map((log, i) => <ListItem key={i} sx={{ py: 0 }}><ListItemText primary={log} primaryTypographyProps={{ fontSize: '0.7rem', color: '#90caf9', fontFamily: 'monospace' }} /></ListItem>)}
+            </List>
+          </Paper>
+        </Box>
+      </Box>
+
+      <Dialog open={open} onClose={() => setOpen(false)}>
+        <DialogTitle sx={{ fontSize: '1rem' }}>장치 등록</DialogTitle>
+        <DialogContent><TextField autoFocus fullWidth variant="standard" label="ID 입력" value={newName} onChange={(e) => setNewName(e.target.value)} /></DialogContent>
+        <DialogActions><Button onClick={() => setOpen(false)}>취소</Button><Button onClick={handleSave} variant="contained">저장</Button></DialogActions>
+      </Dialog>
     </ThemeProvider>
   );
 }
