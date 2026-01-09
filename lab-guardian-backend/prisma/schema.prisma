@@ -1,0 +1,20 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  // ✅ provider는 여기에 있어야 합니다!
+  provider = "sqlite"
+  
+  // ❌ url = "file:./dev.db" <-- 이 줄만 지웁니다.
+}
+
+model EventLog {
+  id        Int      @id @default(autoincrement())
+  createdAt DateTime @default(now())
+  cctvLog   String?  
+  robotLog  String?  
+  camId     String   
+}

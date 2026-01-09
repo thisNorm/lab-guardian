@@ -1,0 +1,8 @@
+-- CreateTable
+CREATE TABLE "EventLog" (
+    "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "cctvLog" TEXT,
+    "robotLog" TEXT,
+    "camId" TEXT NOT NULL
+);
