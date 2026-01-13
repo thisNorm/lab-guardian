@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("LabGuardian.Gateway")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+14cd52e32eb827f70e1458fd89d94cc7ed3a832e")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+8f69dfe0e3cdead683f213f46d6e177d7faa10db")]
 [assembly: System.Reflection.AssemblyProductAttribute("LabGuardian.Gateway")]
 [assembly: System.Reflection.AssemblyTitleAttribute("LabGuardian.Gateway")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

@@ -1,17 +1,17 @@
 {
   "format": 1,
   "restore": {
-    "C:\\Users\\kisoo\\Desktop\\lab-guardian\\Lab-guardian-gateway\\LabGuardian.Gateway.csproj": {}
+    "C:\\Users\\kisoo\\Desktop\\lab-guardian\\lab-guardian-gateway\\LabGuardian.Gateway.csproj": {}
   },
   "projects": {
-    "C:\\Users\\kisoo\\Desktop\\lab-guardian\\Lab-guardian-gateway\\LabGuardian.Gateway.csproj": {
+    "C:\\Users\\kisoo\\Desktop\\lab-guardian\\lab-guardian-gateway\\LabGuardian.Gateway.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\Users\\kisoo\\Desktop\\lab-guardian\\Lab-guardian-gateway\\LabGuardian.Gateway.csproj",
+        "projectUniqueName": "C:\\Users\\kisoo\\Desktop\\lab-guardian\\lab-guardian-gateway\\LabGuardian.Gateway.csproj",
         "projectName": "LabGuardian.Gateway",
-        "projectPath": "C:\\Users\\kisoo\\Desktop\\lab-guardian\\Lab-guardian-gateway\\LabGuardian.Gateway.csproj",
+        "projectPath": "C:\\Users\\kisoo\\Desktop\\lab-guardian\\lab-guardian-gateway\\LabGuardian.Gateway.csproj",
         "packagesPath": "C:\\Users\\kisoo\\.nuget\\packages\\",
-        "outputPath": "C:\\Users\\kisoo\\Desktop\\lab-guardian\\Lab-guardian-gateway\\obj\\",
+        "outputPath": "C:\\Users\\kisoo\\Desktop\\lab-guardian\\lab-guardian-gateway\\obj\\",
         "projectStyle": "PackageReference",
         "configFilePaths": [
           "C:\\Users\\kisoo\\AppData\\Roaming\\NuGet\\NuGet.Config"

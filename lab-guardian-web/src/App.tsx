@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { io, Socket } from "socket.io-client"; 
-import { NETWORK_CONFIG } from './common/config'; // 👈 설정 파일 임포트
+import { NETWORK_CONFIG } from './common/config'; 
 import { 
   AppBar, Toolbar, Typography, Paper, Button, Card, Stack, Box,
   List, ListItem, ListItemText, CssBaseline, keyframes,
-  IconButton, TextField, Dialog, DialogTitle, DialogContent, DialogActions 
+  IconButton, TextField, Dialog, DialogTitle, DialogContent, DialogActions,
+  Tooltip
 } from '@mui/material';
 import Grid from '@mui/material/Grid';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
@@ -13,6 +14,8 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import AddIcon from '@mui/icons-material/Add';
 import FullscreenIcon from '@mui/icons-material/Fullscreen';
 import FullscreenExitIcon from '@mui/icons-material/FullscreenExit';
+import VideocamOffIcon from '@mui/icons-material/VideocamOff';
+import DeleteSweepIcon from '@mui/icons-material/DeleteSweep'; // 클리어 아이콘 추가
 
 const flashRed = keyframes`
   0% { border-color: #ff1744; box-shadow: 0 0 5px #ff1744; }
@@ -49,6 +52,8 @@ function App() {
   const [targetType, setTargetType] = useState<'CCTV' | 'ROBOT'>('CCTV');
   const [newName, setNewName] = useState('');
   
+  const [videoErrors, setVideoErrors] = useState<Record<string, boolean>>({});
+  
   const gatewaySocketRef = useRef<WebSocket | null>(null);
   const robotSocketRef = useRef<Socket | null>(null);
   const isResizing = useRef(false);
@@ -65,77 +70,72 @@ function App() {
   }, []);
 
   // -------------------------------------------------------------
-  // 🔥 [1] C# 게이트웨이 웹소켓 연결
+  // 🔥 [수정] 게이트웨이 웹소켓 연결 및 로그 분류 로직
   // -------------------------------------------------------------
   useEffect(() => {
-    // 주의: C# 서버에서 웹 대시보드용으로 열어둔 포트는 8080입니다.
-    // NETWORK_CONFIG.PC_IP (192.168.0.149) 사용
     const wsUrl = `ws://${NETWORK_CONFIG.PC_IP}:8080`;
-    console.log(`📡 Connecting to Gateway: ${wsUrl}`);
-    
     const ws = new WebSocket(wsUrl);
     gatewaySocketRef.current = ws;
 
     ws.onopen = () => {
-      console.log("✅ C# Gateway Connected");
       setRobotDisplayLogs(prev => [`[System] 게이트웨이(${NETWORK_CONFIG.PC_IP}) 연결됨`, ...prev]);
     };
 
     ws.onmessage = (event) => {
       try {
-        // 1. C#이 보낸 JSON 데이터를 뜯어봅니다.
         const data = JSON.parse(event.data);
-        const { status, message, time } = data; // 구조 분해 할당
+        const { status, message, time, camId } = data;
+        
+        // 1. 장치 ID 추출 및 정규화 (비교를 위해 대문자 변환)
+        const deviceId = camId || 'Unknown';
+        const normalizedId = deviceId.toUpperCase();
 
-        console.log(`📩 DB Data Received:`, data);
-
-        const targetId = 'Robot_01'; // 혹은 data.camId 사용 가능
-
-        // 2. 상태 아이콘/테두리 업데이트
+        // 2. 디바이스 목록 상태 업데이트
         setDevices(prev => prev.map(d => {
-            if (d.id === targetId && d.status !== status) {
+            if (d.id.toUpperCase() === normalizedId && d.status !== status) {
                 return { ...d, status: status as DeviceStatus };
             }
             return d;
         }));
 
-        // 3. 로그 목록에 추가 (DB에 저장된 메시지 그대로 표시)
+        // 3. [핵심] 키워드 기반 범용 로그 분류 로직
         if (status === 'DANGER') {
-            const logMsg = `[${time}] 🚨 ${message}`; // 서버가 준 시간과 메시지 사용
+            const logMsg = `[${time}] 🚨 ${message}`;
             
-            setCctvDisplayLogs(prev => {
+            // 💡 분류 기준: 이름에 CCTV 또는 WEBCAM이 포함되어 있는가?
+            const isStaticCctv = normalizedId.includes('CCTV') || normalizedId.includes('WEBCAM');
+
+            if (isStaticCctv) {
+              // ✅ CCTV_RealSense_999, CCTV_Webcam_202 등은 왼쪽으로
+              setCctvDisplayLogs(prev => {
                 if (prev[0] === logMsg) return prev; 
                 return [logMsg, ...prev].slice(0, 50);
-            });
+              });
+            } else {
+              // ✅ 그 외 모든 장치(ROBOT_1, ROBOT_2, 기타 등등)는 오른쪽으로
+              setRobotDisplayLogs(prev => {
+                if (prev[0] === logMsg) return prev; 
+                return [logMsg, ...prev].slice(0, 50);
+              });
+            }
 
-            // 알람 해제 타이머
-            if (alertTimers.current[targetId]) window.clearTimeout(alertTimers.current[targetId]);
-            alertTimers.current[targetId] = window.setTimeout(() => {
-                setDevices(curr => curr.map(d => d.id === targetId ? { ...d, status: 'IDLE' } : d));
+            // 알람 해제 타이머 (10초 후 IDLE 복구)
+            if (alertTimers.current[deviceId]) window.clearTimeout(alertTimers.current[deviceId]);
+            alertTimers.current[deviceId] = window.setTimeout(() => {
+                setDevices(curr => curr.map(d => d.id === deviceId ? { ...d, status: 'IDLE' } : d));
             }, 10000);
         }
       } catch (e) {
-        // 혹시 JSON이 아니라 평문이 오면 무시하거나 예전 방식으로 처리
-        console.warn("Non-JSON message:", event.data);
+        console.warn("Log processing error:", e);
       }
     };
 
-    ws.onclose = () => {
-      console.log("❌ Gateway Disconnected");
-    };
-
+    ws.onclose = () => {};
     return () => { ws.close(); };
   }, []);
 
-  // -------------------------------------------------------------
-  // 🔥 [2] 로봇 제어 소켓 연결 (IP: 192.168.0.100)
-  // -------------------------------------------------------------
   useEffect(() => {
-    // config에 정의된 ROBOT_IP와 PORT_ROBOT(혹은 5001) 사용
-    // 만약 로봇 파이썬 코드가 5001을 쓴다면 5001로 수정하세요. 여기선 5001로 가정.
     const robotUrl = `http://${NETWORK_CONFIG.ROBOT_IP}:5001`;
-    
-    console.log(`🤖 Connecting to Robot: ${robotUrl}`);
     robotSocketRef.current = io(robotUrl, { 
       transports: ['websocket'],
       reconnectionAttempts: 5
@@ -167,8 +167,6 @@ function App() {
     };
   }, [resizeLogs, stopResizing]);
 
-  // ... (이하 렌더링 코드는 동일, 단 이미지 주소만 변경) ...
-  
   const handleSave = () => {
     const isCctv = targetType === 'CCTV' || newName.toLowerCase().includes('cctv');
     setDevices(prev => [...prev, { id: newName, name: newName, status: 'IDLE', type: isCctv ? 'CCTV' : 'ROBOT' }]);
@@ -183,7 +181,6 @@ function App() {
       position: 'relative', borderRadius: isMaximized ? 0 : 2,
       overflow: 'hidden', bgcolor: '#000'
     }}>
-      {/* ... (상단 헤더 동일) ... */}
       <Box sx={{ 
         position: 'absolute', top: 0, left: 0, right: 0, 
         p: '4px 8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', 
@@ -205,14 +202,21 @@ function App() {
         </Box>
       </Box>
 
-      <Box sx={{ width: '100%', height: '100%', position: 'relative' }}>
-        {/* 🔥 [이미지 주소 변경] ALGO_API_URL 사용 */}
-        <img 
-          src={`${NETWORK_CONFIG.ALGO_API_URL}/video_feed/${dev.id}`} 
-          alt={dev.id}
-          onError={(e) => { e.currentTarget.src = 'https://via.placeholder.com/640x480?text=NO+SIGNAL'; }}
-          style={{ width: '100%', height: '100%', objectFit: isMaximized ? 'contain' : 'cover', display: 'block' }} 
-        />
+      <Box sx={{ width: '100%', height: '100%', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        {videoErrors[dev.id] ? (
+          <Stack alignItems="center" spacing={1}>
+            <VideocamOffIcon sx={{ fontSize: 48, color: '#333' }} />
+            <Typography variant="caption" color="grey.700">NO SIGNAL ({dev.id})</Typography>
+          </Stack>
+        ) : (
+          <img 
+            src={`${NETWORK_CONFIG.ALGO_API_URL}/video_feed/${dev.id}`} 
+            alt={dev.id}
+            onError={() => setVideoErrors(prev => ({ ...prev, [dev.id]: true }))}
+            style={{ width: '100%', height: '100%', objectFit: isMaximized ? 'contain' : 'cover', display: 'block' }} 
+          />
+        )}
+        
         {dev.status === 'DANGER' && (
           <Box sx={{ position: 'absolute', inset: 0, border: '6px solid rgba(255, 23, 68, 0.5)', pointerEvents: 'none' }} />
         )}
@@ -233,7 +237,6 @@ function App() {
     <ThemeProvider theme={darkTheme}>
       <CssBaseline />
       <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
-        {/* ... (이하 레이아웃 코드는 이전과 100% 동일하므로 생략) ... */}
         <AppBar position="static" sx={{ bgcolor: '#000', borderBottom: '1px solid #333' }} elevation={0}>
           <Toolbar variant="dense">
             <SecurityIcon sx={{ mr: 2, color: '#ff1744' }} />
@@ -287,11 +290,23 @@ function App() {
           </Box>
         </Box>
 
+        {/* -------------------------------------------------------------
+          🔥 [수정] 로그 창 레이아웃 및 클리어 버튼 추가
+        ------------------------------------------------------------- */}
         <Box sx={{ height: `${logHeight}px`, position: 'relative', display: 'flex', borderTop: '2px solid #333', bgcolor: '#050505' }}>
           <Box onMouseDown={startResizing} sx={{ position: 'absolute', top: -5, left: 0, right: 0, height: '10px', cursor: 'row-resize', zIndex: 20, '&:hover': { bgcolor: 'primary.main', opacity: 0.5 } }} />
+          
+          {/* CCTV 로그 섹션 */}
           <Paper sx={{ width: '50%', p: 1, bgcolor: 'transparent', borderRight: '1px solid #333', overflow: 'hidden' }} elevation={0}>
-            <Typography variant="caption" color="error" sx={{ fontWeight: 'bold', display: 'block', mb: 1 }}>📡 SECURITY EVENTS (CCTV)</Typography>
-            <List dense sx={{ height: 'calc(100% - 25px)', overflowY: 'auto', bgcolor: '#000', borderRadius: 1 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
+              <Typography variant="caption" color="error" sx={{ fontWeight: 'bold' }}>📡 SECURITY EVENTS (CCTV)</Typography>
+              <Tooltip title="Clear CCTV Logs">
+                <IconButton size="small" onClick={() => setCctvDisplayLogs([])} sx={{ color: '#ff5252', p: 0.5 }}>
+                  <DeleteSweepIcon sx={{ fontSize: 18 }} />
+                </IconButton>
+              </Tooltip>
+            </Box>
+            <List dense sx={{ height: 'calc(100% - 32px)', overflowY: 'auto', bgcolor: '#000', borderRadius: 1 }}>
               {cctvDisplayLogs.map((log, i) => (
                 <ListItem key={i} sx={{ py: 0.5, borderBottom: '1px solid #222' }}>
                   <ListItemText primary={log} primaryTypographyProps={{ fontSize: '0.75rem', color: '#ff5252', fontFamily: 'monospace' }} />
@@ -299,9 +314,18 @@ function App() {
               ))}
             </List>
           </Paper>
+
+          {/* 로봇 로그 섹션 */}
           <Paper sx={{ width: '50%', p: 1, bgcolor: 'transparent', overflow: 'hidden' }} elevation={0}>
-            <Typography variant="caption" color="primary" sx={{ fontWeight: 'bold', display: 'block', mb: 1 }}>🤖 SYSTEM LOGS (ROBOT)</Typography>
-            <List dense sx={{ height: 'calc(100% - 25px)', overflowY: 'auto', bgcolor: '#000', borderRadius: 1 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
+              <Typography variant="caption" color="primary" sx={{ fontWeight: 'bold' }}>🤖 SYSTEM LOGS (ROBOT)</Typography>
+              <Tooltip title="Clear Robot Logs">
+                <IconButton size="small" onClick={() => setRobotDisplayLogs([])} sx={{ color: '#64b5f6', p: 0.5 }}>
+                  <DeleteSweepIcon sx={{ fontSize: 18 }} />
+                </IconButton>
+              </Tooltip>
+            </Box>
+            <List dense sx={{ height: 'calc(100% - 32px)', overflowY: 'auto', bgcolor: '#000', borderRadius: 1 }}>
               {robotDisplayLogs.map((log, i) => (
                 <ListItem key={i} sx={{ py: 0.5, borderBottom: '1px solid #222' }}>
                   <ListItemText primary={log} primaryTypographyProps={{ fontSize: '0.75rem', color: '#64b5f6', fontFamily: 'monospace' }} />
