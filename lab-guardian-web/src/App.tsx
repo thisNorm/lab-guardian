@@ -7,7 +7,8 @@ import {
   IconButton, TextField, Dialog, DialogTitle, DialogContent, DialogActions,
   Tooltip
 } from '@mui/material';
-import Grid from '@mui/material/Grid';
+// ✅ [수정 1] Grid2 대신 표준 Grid 사용 (MUI v6 호환)
+import Grid from '@mui/material/Grid'; 
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import SecurityIcon from '@mui/icons-material/Security';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -15,7 +16,7 @@ import AddIcon from '@mui/icons-material/Add';
 import FullscreenIcon from '@mui/icons-material/Fullscreen';
 import FullscreenExitIcon from '@mui/icons-material/FullscreenExit';
 import VideocamOffIcon from '@mui/icons-material/VideocamOff';
-import DeleteSweepIcon from '@mui/icons-material/DeleteSweep'; // 클리어 아이콘 추가
+import DeleteSweepIcon from '@mui/icons-material/DeleteSweep';
 
 const flashRed = keyframes`
   0% { border-color: #ff1744; box-shadow: 0 0 5px #ff1744; }
@@ -37,9 +38,8 @@ type DeviceStatus = 'IDLE' | 'PATROL' | 'DANGER';
 interface Device { id: string; name: string; status: DeviceStatus; type: 'CCTV' | 'ROBOT'; }
 
 function App() {
-  const [devices, setDevices] = useState<Device[]>([
-    { id: 'Robot_01', name: 'Robot_01', status: 'IDLE', type: 'ROBOT' }
-  ]);
+  // ✅ 초기 상태 빈 배열 (서버 꺼져있을 때 에러 방지)
+  const [devices, setDevices] = useState<Device[]>([]);
   
   const [cctvDisplayLogs, setCctvDisplayLogs] = useState<string[]>([]);
   const [robotDisplayLogs, setRobotDisplayLogs] = useState<string[]>([]);
@@ -69,9 +69,7 @@ function App() {
     if (newHeight > 80 && newHeight < window.innerHeight * 0.8) setLogHeight(newHeight);
   }, []);
 
-  // -------------------------------------------------------------
-  // 🔥 [수정] 게이트웨이 웹소켓 연결 및 로그 분류 로직
-  // -------------------------------------------------------------
+  // 게이트웨이 웹소켓 연결
   useEffect(() => {
     const wsUrl = `ws://${NETWORK_CONFIG.PC_IP}:8080`;
     const ws = new WebSocket(wsUrl);
@@ -85,12 +83,9 @@ function App() {
       try {
         const data = JSON.parse(event.data);
         const { status, message, time, camId } = data;
-        
-        // 1. 장치 ID 추출 및 정규화 (비교를 위해 대문자 변환)
         const deviceId = camId || 'Unknown';
         const normalizedId = deviceId.toUpperCase();
 
-        // 2. 디바이스 목록 상태 업데이트
         setDevices(prev => prev.map(d => {
             if (d.id.toUpperCase() === normalizedId && d.status !== status) {
                 return { ...d, status: status as DeviceStatus };
@@ -98,28 +93,22 @@ function App() {
             return d;
         }));
 
-        // 3. [핵심] 키워드 기반 범용 로그 분류 로직
         if (status === 'DANGER') {
             const logMsg = `[${time}] 🚨 ${message}`;
-            
-            // 💡 분류 기준: 이름에 CCTV 또는 WEBCAM이 포함되어 있는가?
             const isStaticCctv = normalizedId.includes('CCTV') || normalizedId.includes('WEBCAM');
 
             if (isStaticCctv) {
-              // ✅ CCTV_RealSense_999, CCTV_Webcam_202 등은 왼쪽으로
               setCctvDisplayLogs(prev => {
                 if (prev[0] === logMsg) return prev; 
                 return [logMsg, ...prev].slice(0, 50);
               });
             } else {
-              // ✅ 그 외 모든 장치(ROBOT_1, ROBOT_2, 기타 등등)는 오른쪽으로
               setRobotDisplayLogs(prev => {
                 if (prev[0] === logMsg) return prev; 
                 return [logMsg, ...prev].slice(0, 50);
               });
             }
 
-            // 알람 해제 타이머 (10초 후 IDLE 복구)
             if (alertTimers.current[deviceId]) window.clearTimeout(alertTimers.current[deviceId]);
             alertTimers.current[deviceId] = window.setTimeout(() => {
                 setDevices(curr => curr.map(d => d.id === deviceId ? { ...d, status: 'IDLE' } : d));
@@ -134,12 +123,10 @@ function App() {
     return () => { ws.close(); };
   }, []);
 
+  // 로봇 제어 소켓
   useEffect(() => {
     const robotUrl = `http://${NETWORK_CONFIG.ROBOT_IP}:5001`;
-    robotSocketRef.current = io(robotUrl, { 
-      transports: ['websocket'],
-      reconnectionAttempts: 5
-    });
+    robotSocketRef.current = io(robotUrl, { transports: ['websocket'], reconnectionAttempts: 5 });
 
     const handleRemoteControl = (e: KeyboardEvent, type: 'down' | 'up') => {
       if (!maximizedRobotRef.current || !robotSocketRef.current) return;
@@ -173,65 +160,99 @@ function App() {
     setOpen(false); setNewName('');
   };
 
-  const DeviceCard = ({ dev, isMaximized, onMaximize }: { dev: Device, isMaximized: boolean, onMaximize: () => void }) => (
-    <Card sx={{ 
-      height: '100%', width: '100%',
-      border: dev.status === 'DANGER' ? '4px solid #ff1744' : 'none',
-      animation: dev.status === 'DANGER' ? `${flashRed} 1s infinite` : 'none',
-      position: 'relative', borderRadius: isMaximized ? 0 : 2,
-      overflow: 'hidden', bgcolor: '#000'
-    }}>
-      <Box sx={{ 
-        position: 'absolute', top: 0, left: 0, right: 0, 
-        p: '4px 8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', 
-        bgcolor: 'rgba(0,0,0,0.5)', zIndex: 10,
-        opacity: isMaximized ? 0 : 1, '&:hover': { opacity: 1 }, transition: 'opacity 0.3s'
+  const DeviceCard = ({ dev, isMaximized, onMaximize }: { dev: Device, isMaximized: boolean, onMaximize: () => void }) => {
+    
+    // useRef로 상태 관리 (렌더링 유발 X)
+    const isConnectedRef = useRef(false);
+
+    useEffect(() => {
+      return () => {
+        // ✅ 연결된 적이 있을 때만 요청 전송
+        if (isConnectedRef.current) {
+          const url = `${NETWORK_CONFIG.ALGO_API_URL}/stop_monitoring/${dev.id}`;
+          
+          // 🚀 fetch 사용 + 에러 무시 처리
+          fetch(url, { 
+            method: 'POST', 
+            keepalive: true,
+            headers: { 'Content-Type': 'application/json' }
+          // ✅ [수정 2] 'err' 변수 제거 (경고 해결)
+          }).catch(() => {
+            console.log("Disconnect signal sent");
+          });
+        }
+      };
+    }, [dev.id]); 
+
+    return (
+      <Card sx={{ 
+        height: '100%', width: '100%',
+        border: dev.status === 'DANGER' ? '4px solid #ff1744' : 'none',
+        animation: dev.status === 'DANGER' ? `${flashRed} 1s infinite` : 'none',
+        position: 'relative', borderRadius: isMaximized ? 0 : 2,
+        overflow: 'hidden', bgcolor: '#000'
       }}>
-        <Typography variant="caption" sx={{ fontWeight: 'bold', color: '#fff' }}>
-          {dev.name} {dev.status === 'DANGER' && "🚨"}
-        </Typography>
-        <Box>
-          <IconButton size="small" onClick={onMaximize} sx={{ color: 'white' }}>
-            {isMaximized ? <FullscreenExitIcon /> : <FullscreenIcon />}
-          </IconButton>
-          {!isMaximized && (
-            <IconButton size="small" onClick={() => setDevices(prev => prev.filter(d => d.id !== dev.id))} sx={{ color: '#ff5252' }}>
-              <DeleteIcon sx={{ fontSize: 16 }} />
+        <Box sx={{ 
+          position: 'absolute', top: 0, left: 0, right: 0, 
+          p: '4px 8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', 
+          bgcolor: 'rgba(0,0,0,0.5)', zIndex: 10,
+          opacity: isMaximized ? 0 : 1, '&:hover': { opacity: 1 }, transition: 'opacity 0.3s'
+        }}>
+          <Typography variant="caption" sx={{ fontWeight: 'bold', color: '#fff' }}>
+            {dev.name} {dev.status === 'DANGER' && "🚨"}
+          </Typography>
+          <Box>
+            <IconButton size="small" onClick={onMaximize} sx={{ color: 'white' }}>
+              {isMaximized ? <FullscreenExitIcon /> : <FullscreenIcon />}
             </IconButton>
+            {!isMaximized && (
+              <IconButton size="small" onClick={() => setDevices(prev => prev.filter(d => d.id !== dev.id))} sx={{ color: '#ff5252' }}>
+                <DeleteIcon sx={{ fontSize: 16 }} />
+              </IconButton>
+            )}
+          </Box>
+        </Box>
+
+        <Box sx={{ width: '100%', height: '100%', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          {videoErrors[dev.id] ? (
+            <Stack alignItems="center" spacing={1}>
+              <VideocamOffIcon sx={{ fontSize: 48, color: '#333' }} />
+              <Typography variant="caption" color="grey.700">NO SIGNAL ({dev.id})</Typography>
+            </Stack>
+          ) : (
+            <img 
+              src={`${NETWORK_CONFIG.ALGO_API_URL}/video_feed/${dev.id}`} 
+              alt={dev.id}
+              // ✅ 로딩 성공 시 Ref 업데이트
+              onLoad={() => {
+                if (!isConnectedRef.current) isConnectedRef.current = true;
+                setVideoErrors(prev => ({ ...prev, [dev.id]: false }));
+              }}
+              // ✅ 에러 발생 시 Ref 업데이트
+              onError={() => {
+                isConnectedRef.current = false;
+                setVideoErrors(prev => ({ ...prev, [dev.id]: true }));
+              }}
+              style={{ width: '100%', height: '100%', objectFit: isMaximized ? 'contain' : 'cover', display: 'block' }} 
+            />
+          )}
+          
+          {dev.status === 'DANGER' && (
+            <Box sx={{ position: 'absolute', inset: 0, border: '6px solid rgba(255, 23, 68, 0.5)', pointerEvents: 'none' }} />
           )}
         </Box>
-      </Box>
 
-      <Box sx={{ width: '100%', height: '100%', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        {videoErrors[dev.id] ? (
-          <Stack alignItems="center" spacing={1}>
-            <VideocamOffIcon sx={{ fontSize: 48, color: '#333' }} />
-            <Typography variant="caption" color="grey.700">NO SIGNAL ({dev.id})</Typography>
-          </Stack>
-        ) : (
-          <img 
-            src={`${NETWORK_CONFIG.ALGO_API_URL}/video_feed/${dev.id}`} 
-            alt={dev.id}
-            onError={() => setVideoErrors(prev => ({ ...prev, [dev.id]: true }))}
-            style={{ width: '100%', height: '100%', objectFit: isMaximized ? 'contain' : 'cover', display: 'block' }} 
-          />
+        {isMaximized && (
+          <IconButton 
+            onClick={onMaximize} 
+            sx={{ position: 'absolute', top: 20, right: 20, bgcolor: 'rgba(0,0,0,0.6)', color: 'white', '&:hover': { bgcolor: 'rgba(0,0,0,0.9)' }, zIndex: 20 }}
+          >
+            <FullscreenExitIcon fontSize="large" />
+          </IconButton>
         )}
-        
-        {dev.status === 'DANGER' && (
-          <Box sx={{ position: 'absolute', inset: 0, border: '6px solid rgba(255, 23, 68, 0.5)', pointerEvents: 'none' }} />
-        )}
-      </Box>
-
-      {isMaximized && (
-        <IconButton 
-          onClick={onMaximize} 
-          sx={{ position: 'absolute', top: 20, right: 20, bgcolor: 'rgba(0,0,0,0.6)', color: 'white', '&:hover': { bgcolor: 'rgba(0,0,0,0.9)' }, zIndex: 20 }}
-        >
-          <FullscreenExitIcon fontSize="large" />
-        </IconButton>
-      )}
-    </Card>
-  );
+      </Card>
+    );
+  };
 
   return (
     <ThemeProvider theme={darkTheme}>
@@ -255,11 +276,16 @@ function App() {
               </Stack>
             )}
             <Box sx={{ flexGrow: 1, p: maximizedCctv ? 0 : 1 }}>
+              {/* ✅ [수정 3] Grid v6 문법 적용: item prop 삭제, xs 대신 size 사용 */}
               <Grid container spacing={maximizedCctv ? 0 : 1} sx={{ height: '100%' }}>
                 {devices.filter(d => d.type === 'CCTV').map((dev, idx) => {
                   if (maximizedCctv && maximizedCctv !== dev.id) return null;
                   return (
-                    <Grid item xs={maximizedCctv ? 12 : 6} key={`${dev.id}-${idx}`} sx={{ height: maximizedCctv ? '100%' : '50%' }}>
+                    <Grid 
+                      key={`${dev.id}-${idx}`} 
+                      size={maximizedCctv ? 12 : 6} 
+                      sx={{ height: maximizedCctv ? '100%' : '50%' }}
+                    >
                       <DeviceCard dev={dev} isMaximized={maximizedCctv === dev.id} onMaximize={() => setMaximizedCctv(maximizedCctv === dev.id ? null : dev.id)} />
                     </Grid>
                   );
@@ -280,7 +306,11 @@ function App() {
                 {devices.filter(d => d.type === 'ROBOT').map((dev, idx) => {
                   if (maximizedRobot && maximizedRobot !== dev.id) return null;
                   return (
-                    <Grid item xs={maximizedRobot ? 12 : 6} key={`${dev.id}-${idx}`} sx={{ height: maximizedRobot ? '100%' : '50%' }}>
+                    <Grid 
+                      key={`${dev.id}-${idx}`} 
+                      size={maximizedRobot ? 12 : 6}
+                      sx={{ height: maximizedRobot ? '100%' : '50%' }}
+                    >
                       <DeviceCard dev={dev} isMaximized={maximizedRobot === dev.id} onMaximize={() => setMaximizedRobot(maximizedRobot === dev.id ? null : dev.id)} />
                     </Grid>
                   );
@@ -290,13 +320,9 @@ function App() {
           </Box>
         </Box>
 
-        {/* -------------------------------------------------------------
-          🔥 [수정] 로그 창 레이아웃 및 클리어 버튼 추가
-        ------------------------------------------------------------- */}
         <Box sx={{ height: `${logHeight}px`, position: 'relative', display: 'flex', borderTop: '2px solid #333', bgcolor: '#050505' }}>
           <Box onMouseDown={startResizing} sx={{ position: 'absolute', top: -5, left: 0, right: 0, height: '10px', cursor: 'row-resize', zIndex: 20, '&:hover': { bgcolor: 'primary.main', opacity: 0.5 } }} />
           
-          {/* CCTV 로그 섹션 */}
           <Paper sx={{ width: '50%', p: 1, bgcolor: 'transparent', borderRight: '1px solid #333', overflow: 'hidden' }} elevation={0}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
               <Typography variant="caption" color="error" sx={{ fontWeight: 'bold' }}>📡 SECURITY EVENTS (CCTV)</Typography>
@@ -315,7 +341,6 @@ function App() {
             </List>
           </Paper>
 
-          {/* 로봇 로그 섹션 */}
           <Paper sx={{ width: '50%', p: 1, bgcolor: 'transparent', overflow: 'hidden' }} elevation={0}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
               <Typography variant="caption" color="primary" sx={{ fontWeight: 'bold' }}>🤖 SYSTEM LOGS (ROBOT)</Typography>
