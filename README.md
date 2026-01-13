@@ -131,6 +131,20 @@ npm run dev
 ```
 
 </div>
+
+### 4️⃣ 로봇 시스템 (Raspberry Pi 환경)
+로봇 가동을 위해 `lab-guardian-robot` 폴더를 라즈베리파이로 이동시킨 후 다음 과정을 진행합니다.
+```bash
+cd lab-guardian-robot
+# 1. 가상환경 활성화
+source venv-raspbot/bin/activate
+# 2. 필수 라이브러리 설치
+python raspbot_setup/py_install/setup.py
+# 3. 로봇 메인 서버 실행
+python main_server.py
+```
+
+</div>
 </div>
 
 ---
