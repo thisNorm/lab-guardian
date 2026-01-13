@@ -1,6 +1,6 @@
 # config.py
 MY_IP = "192.168.0.100"      # 라즈베리파이 IP
-PC_IP = "192.168.0.131"      # 데스크탑 IP (NestJS, React, Algo 실행처)
+PC_IP = "192.168.0.149"      # 데스크탑 IP (NestJS, React, Algo 실행처)
 
 PORT_ALGO = 3000
 PORT_NEST = 8000
