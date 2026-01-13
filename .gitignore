@@ -1,23 +1,54 @@
-# [.gitignore]
-
-# 파이썬 가상환경 및 캐시
-venv/
-.venv/
-**/venv/
-**/__pycache__/
-*.pyc
-
-# 노드 패키지 (모든 하위 폴더 포함)
-**/node_modules/
-package-lock.json
-
-# 로그 파일
-*.log
-
-# OS 설정 파일
+# [Common]
 .DS_Store
 Thumbs.db
+.env
+.env.*
+!.env.example
 
-# IDE 설정
+# [IDE & Editors]
 .vscode/
 .idea/
+*.swp
+*.swo
+*.suo
+*.sln
+*.user
+
+# [Python / FastAPI / Algorithm]
+**/__pycache__/
+*.py[cod]
+*$py.class
+**/venv/
+**/.venv/
+.python-version
+# 특정 가상환경 폴더명이 있다면 추가
+lab-guardian-robot/venv-raspbot/
+
+# [C# / .NET / Gateway]
+**/bin/
+**/obj/
+**/publish/
+.vs/
+# SQLite Database (보안 및 용량 이슈로 반드시 제외)
+**/LogDatabase.db
+**/LogDatabase.db-shm
+**/LogDatabase.db-wal
+
+# [Node.js / React / Web]
+**/node_modules/
+**/dist/
+**/build/
+**/coverage/
+.npm
+.eslintcache
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# [Temporary & Logs]
+*.log
+**/logs/
+pids
+*.pid
+*.seed
+*.pid.lock

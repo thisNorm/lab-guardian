@@ -3,6 +3,7 @@ import time, socket, threading, cv2, numpy as np
 from fastapi import FastAPI, UploadFile, File
 from fastapi.responses import StreamingResponse
 from ai_detector import AIDetector 
+import struct
 
 PC_IP = "192.168.0.149"
 PORT_GATEWAY = 8888
@@ -15,14 +16,19 @@ last_seen = {}
 last_idle_sent_time = 0
 
 def send_to_gateway(cam_id, status_msg):
-    """ ✅ 장치 ID와 상태를 함께 전송 (예: ROBOT_1:DANGER) """
     try:
         full_msg = f"{cam_id}:{status_msg}"
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.settimeout(0.1)
+            s.settimeout(1.0) # 타임아웃을 0.1보다 조금 늘려 안정성 확보
+            # 소켓 종료 시 잔여 데이터를 기다리는 옵션 (Linger)
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, struct.pack('ii', 1, 0))
             s.connect((PC_IP, PORT_GATEWAY))
             s.sendall(full_msg.encode('utf-8'))
-    except: pass
+    except (ConnectionResetError, socket.timeout):
+        # 연결이 끊겼거나 타임아웃 시 로그만 남기고 무시 (자동 복구 유도)
+        pass
+    except Exception as e:
+        print(f"📡 Gateway Send Error: {e}")
 
 @app.post("/update_mode/{robot_id}")
 async def update_mode(robot_id: str, mode_data: dict):
@@ -95,13 +101,56 @@ monitor_thread = threading.Thread(target=check_offline_devices_safe, daemon=True
 monitor_thread.start()
 
 if __name__ == "__main__":
-    import uvicorn, os, asyncio
-    config = uvicorn.Config(app, host="0.0.0.0", port=PORT_ALGO, log_level="critical", access_log=False)
+    import uvicorn
+    import os
+    import asyncio
+    import sys
+    from functools import wraps
+
+    # ---------------------------------------------------------
+    # ✨ [추가] Windows asyncio ProactorEventLoop 10054 패치
+    # ---------------------------------------------------------
+    if sys.platform == 'win32':
+        from asyncio.proactor_events import _ProactorBasePipeTransport
+
+        def silence_event_loop_error(func):
+            @wraps(func)
+            def wrapper(*args, **kwargs):
+                try:
+                    return func(*args, **kwargs)
+                except (ConnectionResetError, OSError):
+                    # 연결이 이미 끊긴 소켓을 닫으려 할 때 발생하는 에러 무시
+                    pass
+            return wrapper
+
+        # asyncio 내부의 연결 종료 콜백 함수를 에러 무시 버전으로 교체
+        _ProactorBasePipeTransport._call_connection_lost = silence_event_loop_error(
+            _ProactorBasePipeTransport._call_connection_lost
+        )
+    # ---------------------------------------------------------
+
+    stop_event = threading.Event()
+
+    # 오프라인 체크 스레드 시작 (기존 로직)
+    monitor_thread = threading.Thread(target=check_offline_devices_safe, daemon=True)
+    monitor_thread.start()
+
+    config = uvicorn.Config(
+        app, 
+        host="0.0.0.0", 
+        port=PORT_ALGO, 
+        log_level="critical", 
+        access_log=False
+    )
     server = uvicorn.Server(config)
+
     try:
         server.run()
     except (KeyboardInterrupt, asyncio.exceptions.CancelledError):
         stop_event.set()
+        print("\n👋 서버를 종료합니다...")
     finally:
         stop_event.set()
+        print("✅ 터미널 제어권을 반환합니다.")
+        # os._exit(0)는 모든 스레드를 강제 종료하고 터미널로 즉시 복귀시킵니다.
         os._exit(0)
