@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Raspbot 실시간 스트리밍</title>
+</head>
+<body>
+    <h1>Raspbot Live View</h1>
+    <img id="videoFeed" src="" width="640" alt="연결 대기 중...">
+
+    <script>
+        // 라즈베리파이의 실제 IP 주소로 수정하세요
+        const socket = new WebSocket('ws://192.168.0.100:9999'); 
+        const img = document.getElementById('videoFeed');
+
+        socket.onmessage = function(event) {
+            // 서버에서 보낸 바이너리(Blob) 데이터를 URL로 변환하여 출력
+            const blob = event.data;
+            const url = URL.createObjectURL(blob);
+            img.src = url;
+
+            // 메모리 누수 방지를 위해 이전 URL 해제
+            img.onload = function() {
+                URL.revokeObjectURL(url);
+            };
+        };
+
+        socket.onopen = () => console.log('Connected to Stream Server');
+        socket.onclose = () => console.log('Disconnected from Stream Server');
+    </script>
+</body>
+</html>
