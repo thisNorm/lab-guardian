@@ -1,6 +1,6 @@
 # 🛡️ ETRI Lab Guardian System
 > **AI 기반 다중 로봇 및 CCTV 통합 실험실 안전 관제 시스템**
-> (AI-Powered Multi-Robot & CCTV Laboratory Safety Monitoring System)
+> <br/>(AI-Powered Multi-Robot & CCTV Laboratory Safety Monitoring System)
 
 <div align="center">
 
@@ -38,51 +38,6 @@
 ```mermaid
 graph TD
     subgraph "Edge Devices (Robot / CCTV)"
-        A[🤖 Raspbot] -- aiohttp (POST) --> C
-        B[📷 Static CCTV] -- aiohttp (POST) --> C
-        A -- Socket.io (Port: 5001) --- F
-    end
-
-    subgraph "Core Data & Control Hub"
-        C[🧠 Algo Server (FastAPI)] -- TCP Message --> G
-        G[🚀 C# Gateway] -- Save Log --> DB[(SQLite DB)]
-        G -- WebSocket (Port: 8080) --> F
-    end
-
-    subgraph "Control Center (Dashboard)"
-        F[💻 React Web] -- MJPEG Stream --> F
-        F -- Direct Control Cmd --> A
-        F -- Mode Update (POST) --> C
-    end
-```
-</div>
-</div>
----
-</div>
-</div>
-## 📖 Project Overview
-**Lab Guardian**은 위험한 실험실 환경을 순찰하는 자율 주행 로봇(Raspbot)과 고정형 CCTV를 통합 관리하는 시스템입니다. AI 객체 탐지를 통해 위험 상황을 실시간 감지하며, 전용 **C# 게이트웨이**를 통해 모든 보안 이벤트를 데이터베이스에 체계적으로 기록합니다. 특히, 중간 서버를 거치지 않는 **로봇 직결 제어 시스템**과 **상태별 로그 분리 저장 로직**을 통해 실시간 관제 성능과 사후 추적성을 동시에 확보했습니다.
-
-### ✨ 핵심 업데이트 기능 (Core Features)
-* **Integrated C# Gateway:** 모든 엣지 장치의 신호를 통합하여 WebSocket으로 브라우저에 전송하고, 동시에 SQLite DB에 이력을 남기는 고성능 관제 허브 구현.
-* **Dual-Column Log System:** CCTV 로그와 로봇 로그를 별도 컬럼에 저장하여 장치별 독립적인 이력 관리가 가능하며, `CamId`를 통한 명확한 기기 식별 지원.
-* **Real-time Connection Monitoring:** 장치의 연결 성공(`CONNECTED`) 및 종료(`DISCONNECTED`)를 실시간 감지하여 DB에 자동 기록.
-* **Operation Mode Tracking:** 사용자의 전체화면 조종(`CONTROL`) 및 자동 감시(`MONITOR`) 모드 전환 이력을 로그화하여 관제 상태 추적 가능.
-* **Smart Log Categorization:** 기기 이름(CCTV/Webcam/Robot)에 따라 웹 대시보드의 좌/우 로그 섹션으로 자동 분류되는 지능형 라우팅 로직.
-* **Direct Web-to-Robot Control:** Socket.io를 활용해 웹 브라우저에서 로봇으로 제어 신호를 직접 송신하여 초저지연 조종 성능 확보.
-* **Auto-Recovery Alarm:** 위험 감지 시 붉은색 점멸 알람이 발생하며, 10초 후 자동으로 정상 상태로 복구되는 지능형 타이머 로직.
-</div>
-</div>
----
-</div>
-</div>
-## 🏗️ System Architecture
-
-### 1. High-Level Architecture
-
-```mermaid
-graph TD
-    subgraph "Edge Devices (Robot / CCTV)"
         A["🤖 Raspbot"] -- "aiohttp (POST)" --> C
         B["📷 Static CCTV"] -- "aiohttp (POST)" --> C
         A -- "Socket.io (Port: 5001)" --- F
@@ -100,11 +55,15 @@ graph TD
         F -- "Mode Update (POST)" --> C
     end
 ```
+
 </div>
 </div>
+
 ---
+
 </div>
 </div>
+
 ## 2. Standardized Event Flow (이벤트 흐름)
 모든 이벤트는 일관된 메시지 포맷으로 처리되어 DB와 웹에 동일하게 기록됩니다.
 
@@ -119,9 +78,12 @@ graph TD
 
 </div>
 </div>
+
 ---
+
 </div>
 </div>
+
 ## 💡 Technical Decisions (기술적 의사결정)
 ### 1. C# 기반 통합 게이트웨이 및 SQLite 연동
 데이터의 무결성과 실시간 전송을 위해 멀티스레딩에 강한 C#으로 게이트웨이를 구축했습니다. Fleck 라이브러리를 활용한 WebSocket 통신과 Entity Framework Core를 활용한 SQLite 연동으로 고부하 상황에서도 안정적인 로그 저장을 보장합니다.
@@ -133,9 +95,12 @@ graph TD
 기존 동기 전송 방식의 성능 병목을 해결하기 위해 `aiohttp`와 `asyncio`를 도입했습니다. 영상 전송과 로봇 제어를 병렬 처리함으로써, 매끄러운 주행과 고화질 스트리밍을 동시에 달성했습니다.
 </div>
 </div>
+
 ---
+
 </div>
 </div>
+
 ## 🚀 Getting Started (통합 실행 가이드)
 ### 1️⃣ C# 게이트웨이 (Hub)
 ```bash
@@ -144,7 +109,9 @@ cd lab-guardian-gateway
 dotnet run
 # Port: 8888 (TCP), 8080 (WS)
 ```
+
 </div>
+
 ### 2️⃣ 알고리즘 서버 (AI Server)
 ```bash
 cd lab-guardian-algorithm
@@ -153,18 +120,24 @@ pip install -r requirements.txt
 python main.py
 python multi_cam_agent.py
 ```
+
 </div>
+
 ### 3️⃣ 웹 대시보드 (React)
 ```bash
 cd lab-guardian-web
 npm install
 npm run dev
 ```
+
 </div>
 </div>
+
 ---
+
 </div>
 </div>
+
 ## 📂 Project Structure
 ```bash
 root/
@@ -179,11 +152,15 @@ root/
 └── lab-guardian-web/        # React 관제 대시보드 (MUI)
     └── src/App.tsx          # 좌(CCTV)/우(Robot) 로그 자동 분류 및 조종 로직
 ```
+
 </div>
 </div>
+
 ---
+
 </div>
 </div>
+
 ## 🛠️ Troubleshooting (해결 사례)
 
 + **DB 파일 잠금 및 완전 초기화**: 서버 종료 후 .db, .db-shm, .db-wal 파일을 모두 삭제하여 데이터 정합성 문제 해결 및 클린 초기화를 수행하는 가이드를 구축했습니다.
