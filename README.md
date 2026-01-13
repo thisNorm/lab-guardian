@@ -83,21 +83,21 @@ graph TD
 ```mermaid
 graph TD
     subgraph "Edge Devices (Robot / CCTV)"
-        A[🤖 Raspbot] -- aiohttp (POST) --> C
-        B[📷 Static CCTV] -- aiohttp (POST) --> C
-        A -- Socket.io (Port: 5001) --- F
+        A["🤖 Raspbot"] -- "aiohttp (POST)" --> C
+        B["📷 Static CCTV"] -- "aiohttp (POST)" --> C
+        A -- "Socket.io (Port: 5001)" --- F
     end
 
     subgraph "Core Data & Control Hub"
-        C[🧠 Algo Server (FastAPI)] -- TCP Message --> G
-        G[🚀 C# Gateway] -- Save Log --> DB[(SQLite DB)]
-        G -- WebSocket (Port: 8080) --> F
+        C["🧠 Algo Server (FastAPI)"] -- "TCP Message" --> G
+        G["🚀 C# Gateway"] -- "Save Log" --> DB[("SQLite DB")]
+        G -- "WebSocket (Port: 8080)" --> F
     end
 
     subgraph "Control Center (Dashboard)"
-        F[💻 React Web] -- MJPEG Stream --> F
-        F -- Direct Control Cmd --> A
-        F -- Mode Update (POST) --> C
+        F["💻 React Web"] -- "MJPEG Stream" --> F
+        F -- "Direct Control Cmd" --> A
+        F -- "Mode Update (POST)" --> C
     end
 ```
 </div>
@@ -108,17 +108,14 @@ graph TD
 ## 2. Standardized Event Flow (이벤트 흐름)
 모든 이벤트는 일관된 메시지 포맷으로 처리되어 DB와 웹에 동일하게 기록됩니다.
 
-| **상태 \(Status\)** | **내용 \(Message\)** | **비고**             | **** | **** | **** | **** | **** | **** | **** |
-|-------------------|--------------------|--------------------|------|------|------|------|------|------|------|
-| DANGER            | 🚨 침입자 감지\!        | 즉시 DB 저장 및 웹 점멸 알람 |      |      |      |      |      |      |      |
-| SAFE              | ✅ 이상 없음 \(정기 보고\)  | 10분 주기 하트비트 보고     |      |      |      |      |      |      |      |
-| CONNECTED         | 🌐 장치 연결 성공        | 장치 최초 접속 시 기록      |      |      |      |      |      |      |      |
-| DISCONNECTED      | ❌ 장치 연결 끊김         | 5초 이상 신호 부재 시 기록   |      |      |      |      |      |      |      |
-| CONTROL           | 🎮 조종 모드 진입        | 전체화면 조종 시 기록       |      |      |      |      |      |      |      |
-| MONITOR           | 🛡️ 감시 모드 복귀       | 전체화면 해제 시 기록       |      |      |      |      |      |      |      |
-|                   |                    |                    |      |      |      |      |      |      |      |
-|                   |                    |                    |      |      |      |      |      |      |      |
-|                   |                    |                    |      |      |      |      |      |      |      |
+| **상태 \(Status\)** | **내용 \(Message\)** | **비고**             |
+|-------------------|--------------------|--------------------|
+| DANGER            | 🚨 침입자 감지\!        | 즉시 DB 저장 및 웹 점멸 알람 |
+| SAFE              | ✅ 이상 없음 \(정기 보고\)  | 10분 주기 하트비트 보고     |
+| CONNECTED         | 🌐 장치 연결 성공        | 장치 최초 접속 시 기록      |
+| DISCONNECTED      | ❌ 장치 연결 끊김         | 5초 이상 신호 부재 시 기록   |
+| CONTROL           | 🎮 조종 모드 진입        | 전체화면 조종 시 기록       |
+| MONITOR           | 🛡️ 감시 모드 복귀       | 전체화면 해제 시 기록       |
 
 </div>
 </div>
