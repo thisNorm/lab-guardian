@@ -160,7 +160,7 @@ root/
 │   └── LogDatabase.db       # 보안 이벤트 로그 저장소 (SQLite)
 │
 ├── lab-guardian-algorithm/  # AI 처리 서버 (FastAPI)
-│   ├── main.py              # 프레임 분석 및 상태(DANGER/SAFE/MODE) 보고
+│   ├── main.py              # 프레임 분석, 상태(DANGER/SAFE) 보고 및 API
 │   └── ai_detector.py       # YOLO 기반 객체 탐지 및 추적 엔진
 │
 └── lab-guardian-web/        # React 관제 대시보드 (MUI)
@@ -177,17 +177,27 @@ root/
 
 ## 🛠️ Troubleshooting (해결 사례)
 
-+ **DB 파일 잠금 및 완전 초기화**: 서버 종료 후 .db, .db-shm, .db-wal 파일을 모두 삭제하여 데이터 정합성 문제 해결 및 클린 초기화를 수행하는 가이드를 구축했습니다.
++ **DB 파일 잠금 및 완전 초기화**
 
-+ **터미널 제어권 반환 및 프로세스 관리**: 서버 종료 시 백그라운드 스레드 점유 문제를 stop_event와 os._exit(0) 도입으로 해결하여 즉각적인 프롬프트 반환을 보장했습니다.
+서버 종료 후 .db, .db-shm, .db-wal 파일을 모두 삭제하여 데이터 정합성 문제 해결 및 클린 초기화를 수행하는 가이드를 구축했습니다.
 
-+ **로그 실시간 분류 오류**: 리액트 onmessage 내 기기 키워드(CCTV/WEBCAM) 필터링 로직 보완을 통해 로봇 로그가 CCTV 창에 섞이는 문제를 해결했습니다.
++ **터미널 제어권 반환 및 프로세스 관리**
 
-+ **비동기 영상 전송 딜레이**: main_server.py의 asyncio.sleep() 조정을 통해 주행 제어와 스트리밍 간의 성능 최적화를 달성했습니다.
+서버 종료 시 백그라운드 스레드 점유 문제를 stop_event와 os._exit(0) 도입으로 해결하여 즉각적인 프롬프트 반환을 보장했습니다.
 
-+ **WinError 10054 (ConnectionResetError):** - **현상**: 윈도우 환경에서 `asyncio` 루프가 이미 닫힌 소켓을 종료하려 할 때 로그에 대량의 예외 발생.
-  - 원인: `ProactorEventLoop`의 소켓 정리 시점과 원격 호스트의 연결 강제 종료 시점 간의 비동기 충돌.
-  - 해결: `_ProactorBasePipeTransport`의 연결 소실 콜백에 래퍼(Wrapper)를 씌워 예외를 무시하도록 패치하고, 소켓 전송 시 `SO_LINGER` 옵션을 적용해 안정적인 데이터 송신 보장.
++ **로그 실시간 분류 오류**
+
+React onmessage 내 기기 키워드(CCTV/WEBCAM) 필터링 로직 보완을 통해 로봇 로그가 CCTV 창에 섞이는 문제를 해결했습니다.
+
++ **비동기 영상 전송 딜레이**
+
+main_server.py의 asyncio.sleep() 조정을 통해 주행 제어와 스트리밍 간의 성능 최적화를 달성했습니다.
+
++ **WinError 10054 (ConnectionResetError)**
+
+    + 현상: 윈도우 환경에서 asyncio 루프가 이미 닫힌 소켓을 종료하려 할 때 로그에 대량의 예외 발생.
+
+    + 해결: _ProactorBasePipeTransport의 연결 소실 콜백에 래퍼(Wrapper)를 씌워 불필요한 예외 로그를 무시하도록 패치하여 서버 안정성을 확보했습니다.
 
 ---
 
