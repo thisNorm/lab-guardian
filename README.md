@@ -185,6 +185,10 @@ root/
 
 + **비동기 영상 전송 딜레이**: main_server.py의 asyncio.sleep() 조정을 통해 주행 제어와 스트리밍 간의 성능 최적화를 달성했습니다.
 
++ **WinError 10054 (ConnectionResetError):** - **현상**: 윈도우 환경에서 `asyncio` 루프가 이미 닫힌 소켓을 종료하려 할 때 로그에 대량의 예외 발생.
+  - 원인: `ProactorEventLoop`의 소켓 정리 시점과 원격 호스트의 연결 강제 종료 시점 간의 비동기 충돌.
+  - 해결: `_ProactorBasePipeTransport`의 연결 소실 콜백에 래퍼(Wrapper)를 씌워 예외를 무시하도록 패치하고, 소켓 전송 시 `SO_LINGER` 옵션을 적용해 안정적인 데이터 송신 보장.
+
 ---
 
 <div align="center"> <b>This project was designed and developed entirely by GyuBeom Hwang.</b>
