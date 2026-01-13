@@ -131,6 +131,20 @@ npm run dev
 ```
 
 </div>
+
+### 4️⃣ 로봇 시스템 (Raspberry Pi 환경)
+로봇 가동을 위해 `lab-guardian-robot` 폴더를 라즈베리파이로 이동시킨 후 다음 과정을 진행합니다.
+```bash
+cd lab-guardian-robot
+# 1. 가상환경 활성화
+source venv-raspbot/bin/activate
+# 2. 필수 라이브러리 설치
+python raspbot_setup/py_install/setup.py
+# 3. 로봇 메인 서버 실행
+python main_server.py
+```
+
+</div>
 </div>
 
 ---
@@ -170,6 +184,10 @@ root/
 + **로그 실시간 분류 오류**: 리액트 onmessage 내 기기 키워드(CCTV/WEBCAM) 필터링 로직 보완을 통해 로봇 로그가 CCTV 창에 섞이는 문제를 해결했습니다.
 
 + **비동기 영상 전송 딜레이**: main_server.py의 asyncio.sleep() 조정을 통해 주행 제어와 스트리밍 간의 성능 최적화를 달성했습니다.
+
++ **WinError 10054 (ConnectionResetError):** - **현상**: 윈도우 환경에서 `asyncio` 루프가 이미 닫힌 소켓을 종료하려 할 때 로그에 대량의 예외 발생.
+  - 원인: `ProactorEventLoop`의 소켓 정리 시점과 원격 호스트의 연결 강제 종료 시점 간의 비동기 충돌.
+  - 해결: `_ProactorBasePipeTransport`의 연결 소실 콜백에 래퍼(Wrapper)를 씌워 예외를 무시하도록 패치하고, 소켓 전송 시 `SO_LINGER` 옵션을 적용해 안정적인 데이터 송신 보장.
 
 ---
 
