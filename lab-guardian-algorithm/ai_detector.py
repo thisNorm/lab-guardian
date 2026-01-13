@@ -1,45 +1,56 @@
 # ai_detector.py
 from ultralytics import YOLO
 import cv2
-from centroidtracker import CentroidTracker # 추적기 임포트
+import numpy as np
+from centroidtracker import CentroidTracker 
 
 class AIDetector:
     def __init__(self, model_name='yolov8n.pt'):
         print(f"🧠 [AI] 모델({model_name}) 로딩 중...")
         self.model = YOLO(model_name)
-        # 카메라별 트래커를 관리할 딕셔너리 { "cam_id": CentroidTracker() }
+        # 카메라별 트래커 관리
         self.trackers = {}
         print("✅ [AI] 모델 및 트래커 준비 완료!")
 
     def detect_and_track(self, cam_id, frame):
         """
-        프레임을 분석하고, '새로 발견된' 객체의 ID 리스트를 반환합니다.
+        프레임을 분석하고, '사람(Person)' 객체의 ID 리스트를 반환합니다.
         """
-        results = self.model(frame, verbose=False)
+        # 🚀 [핵심 수정 1] classes=[0] -> 사람(0번)만 탐지하도록 강제
+        # 🚀 [핵심 수정 2] conf=0.6 -> 확신이 60% 이상일 때만 탐지 (오탐지 제거)
+        results = self.model(frame, verbose=False, classes=[0], conf=0.6)
+        
+        # YOLO가 그린 그림 (사람만 그려져 있음)
         annotated_frame = results[0].plot()
         
         person_rects = []
+        
+        # 탐지된 박스 좌표 추출
         for box in results[0].boxes:
-            class_id = int(box.cls[0])
-            if self.model.names[class_id] == 'person':
-                person_rects.append(map(int, box.xyxy[0]))
+            # 이미 classes=[0]으로 필터링했으므로 굳이 if문으로 'person'인지 확인할 필요 없음
+            # 좌표를 정수형 리스트로 변환
+            x1, y1, x2, y2 = map(int, box.xyxy[0])
+            person_rects.append((x1, y1, x2, y2))
         
         # 해당 카메라용 트래커가 없으면 생성
         if cam_id not in self.trackers:
+            # maxDisappeared: 객체가 사라져도 40프레임 동안은 ID 유지 (잠깐 가려짐 대비)
             self.trackers[cam_id] = CentroidTracker(maxDisappeared=40)
         
-        # 추적 업데이트
+        # 트래커 업데이트 (좌표 정보 전달)
         objects = self.trackers[cam_id].update(person_rects)
         
-        # 💡 [핵심] 이번 프레임에서 '처음' 등장한 ID들만 추출
+        # 이번 프레임에서 '새로' ID를 부여받은 목록 추출
         new_ids = getattr(self.trackers[cam_id], 'new_detected_ids', [])
         
-        # 화면에 ID 표시 (시각화)
+        # 화면에 추적 ID 그리기 (디버깅용)
         for (objectID, centroid) in objects.items():
             text = f"ID {objectID}"
+            # 점 찍기
+            cv2.circle(annotated_frame, (centroid[0], centroid[1]), 4, (0, 0, 255), -1)
+            # 글자 쓰기
             cv2.putText(annotated_frame, text, (centroid[0] - 10, centroid[1] - 10),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
-            cv2.circle(annotated_frame, (centroid[0], centroid[1]), 4, (0, 255, 0), -1)
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
             
         return annotated_frame, new_ids, objects
 
@@ -47,3 +58,4 @@ class AIDetector:
         """장치 연결 끊김 시 트래커 제거"""
         if cam_id in self.trackers:
             del self.trackers[cam_id]
+            print(f"🧹 [AI] {cam_id} 트래커 메모리 해제")
