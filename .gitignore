@@ -21,6 +21,8 @@ Thumbs.db
 **/venv/
 **/.venv/
 .python-version
+*/recordings
+*.env
 # 특정 가상환경 폴더명이 있다면 추가
 lab-guardian-robot/venv-raspbot/
 

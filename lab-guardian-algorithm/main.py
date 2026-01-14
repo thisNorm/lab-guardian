@@ -1,87 +1,117 @@
-import time, socket, threading, cv2, numpy as np
+import time, socket, cv2, numpy as np
 import uvicorn, os, asyncio, sys
 from functools import wraps
 from fastapi import FastAPI, UploadFile, File
 from fastapi.responses import StreamingResponse
-from ai_detector import AIDetector 
+from fastapi.middleware.cors import CORSMiddleware 
+from fastapi.staticfiles import StaticFiles 
+from dotenv import load_dotenv # 환경변수 로드
 
-PC_IP = "192.168.0.149"
+# ✅ functions 폴더에서 모듈 불러오기
+from functions.ai_detector import AIDetector
+from functions.notifier import TelegramNotifier
+from functions.recorder import VideoRecorder
+
+# ================= 설정 (환경변수 적용) =================
+load_dotenv() # .env 파일 로딩
+
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+PC_IP = os.getenv("PC_IP")
 PORT_GATEWAY = 8888
 PORT_ALGO = 3000
 
+if not TELEGRAM_TOKEN or not PC_IP:
+    print("❌ [오류] .env 파일 설정이 누락되었습니다.")
+    sys.exit(1)
+# ======================================================
+
 app = FastAPI()
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+
+# recordings 폴더 개방
+os.makedirs("recordings", exist_ok=True)
+app.mount("/recordings", StaticFiles(directory="recordings"), name="recordings")
+
+# ✅ 모듈 초기화
 detector = AIDetector()
+notifier = TelegramNotifier(TELEGRAM_TOKEN, TELEGRAM_CHAT_ID)
+recorder = VideoRecorder(save_dir="recordings")
 
-# 전역 변수
-camera_streams = {}          
-last_seen = {}               
-last_heartbeat_times = {}    
-current_device_status = {}   
+# 상태 변수들
+camera_streams = {}
+last_seen = {}
+last_heartbeat = {}
+device_status = {}
+active_viewers = set()
+verified_viewers = set()
+last_alert_times = {}
+ALERT_COOLDOWN = 30
 
-# ✨ [핵심] 2단계 시청자 관리
-active_viewers = set()       # 1단계: 웹 요청이 들어옴 (AI 연산 시작)
-verified_viewers = set()     # 2단계: 연결 성공 로그까지 보냄 (DANGER 전송 허용)
+def create_offline_frame():
+    img = np.zeros((480, 640, 3), dtype=np.uint8)
+    cv2.putText(img, "DISCONNECTED", (180, 240), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+    return img
+offline_frame = create_offline_frame()
 
-HEARTBEAT_INTERVAL = 600     
-
-def send_to_gateway(cam_id, status_msg):
+def send_to_gateway(cam_id, status_msg, image_path=None):
     try:
         full_msg = f"{cam_id}:{status_msg}"
+        if image_path:
+            full_msg += f":{image_path}"
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.settimeout(2.0)
             s.connect((PC_IP, PORT_GATEWAY))
             s.sendall(full_msg.encode('utf-8'))
+            print(f"📡 [전송] {full_msg}") 
     except Exception as e:
         print(f"❌ [전송 실패] {e}")
 
-@app.post("/update_mode/{robot_id}")
-async def update_mode(robot_id: str, mode_data: dict):
-    mode = mode_data.get("mode", "UNKNOWN")
-    status_code = "CONTROL" if mode == "CONTROL" else "MONITOR"
-    send_to_gateway(robot_id, status_code)
-    return {"status": "success"}
-
 @app.post("/upload_frame/{robot_id}")
 async def upload_frame(robot_id: str, file: UploadFile = File(...)):
-    """ ✅ 데이터 수신부 (유령 로그 차단 로직 적용) """
     try:
         contents = await file.read()
         nparr = np.frombuffer(contents, np.uint8)
         frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
         if frame is None: return {"status": "fail"}
 
-        last_seen[robot_id] = time.time()
+        current_time = time.time()
+        last_seen[robot_id] = current_time
 
-        # 1. 시청자가 없으면 AI 탐지 자체를 스킵 (CPU 절약)
         if robot_id not in active_viewers:
             camera_streams[robot_id] = frame
             return {"status": "ignored"}
 
-        # 2. AI 탐지 수행
-        annotated_frame, new_ids, all_objects = detector.detect_and_track(robot_id, frame)
+        annotated_frame, new_ids, _ = detector.detect_and_track(robot_id, frame)
 
-        # 3. 위험 감지 및 로그 전송 로직
-        if new_ids:
-            # 🚀 [수정] '인증된 시청자'일 때만 DANGER 로그 전송
-            # 브라우저가 몰래 재접속 중일 때는(verified 아님) 로그를 막음
-            if robot_id in verified_viewers:
-                if current_device_status.get(robot_id) != "DANGER":
-                    current_device_status[robot_id] = "DANGER"
-                    send_to_gateway(robot_id, "DANGER")
+        if new_ids and robot_id in verified_viewers:
+            status_changed = False
+            if device_status.get(robot_id) != "DANGER":
+                device_status[robot_id] = "DANGER"
+                status_changed = True
+
+            if current_time - last_alert_times.get(robot_id, 0) > ALERT_COOLDOWN:
+                img_path = recorder.save_snapshot(robot_id, frame)
+                notifier.send_photo(robot_id, frame)
+                recorder.start_recording(robot_id, duration=10.0, current_time=current_time)
+                send_to_gateway(robot_id, "침입자 감지(스냅샷)", image_path=img_path)
+                last_alert_times[robot_id] = current_time
             
-            # 타이머는 계속 리셋 (화면 켰을 때 바로 알 수 있게)
-            last_heartbeat_times[robot_id] = time.time()
-        else:
-            if current_device_status.get(robot_id) == "DANGER":
-                current_device_status[robot_id] = "SAFE"
-                last_heartbeat_times[robot_id] = time.time()
+            elif status_changed:
+                send_to_gateway(robot_id, "DANGER")
+            
+            last_heartbeat[robot_id] = current_time
+        
+        elif not new_ids and device_status.get(robot_id) == "DANGER":
+            device_status[robot_id] = "SAFE"
+            last_heartbeat[robot_id] = current_time
 
-        # 4. 정기 보고 (SAFE) - 인증된 시청자가 있을 때만 전송
-        last_send = last_heartbeat_times.get(robot_id, 0)
-        if time.time() - last_send >= HEARTBEAT_INTERVAL:
-            if robot_id in verified_viewers and current_device_status.get(robot_id) != "DANGER":
+        recorder.process_frame(robot_id, frame, current_time)
+
+        if current_time - last_heartbeat.get(robot_id, 0) >= 600:
+            if robot_id in verified_viewers and device_status.get(robot_id) != "DANGER":
                 send_to_gateway(robot_id, "SAFE")
-                last_heartbeat_times[robot_id] = time.time()
+                last_heartbeat[robot_id] = current_time
 
         camera_streams[robot_id] = annotated_frame
         return {"status": "ok"}
@@ -89,73 +119,58 @@ async def upload_frame(robot_id: str, file: UploadFile = File(...)):
 
 @app.get("/video_feed/{cam_id}")
 def video_feed(cam_id: str):
-    """ ✅ 웹 스트리밍 송출부 """
     def generate():
+        active_viewers.add(cam_id)
         is_logged = False
-        active_viewers.add(cam_id) # 1단계: 요청 접수
-        
         try:
             while True:
-                current_time = time.time()
-                is_device_active = (cam_id in camera_streams) and (current_time - last_seen.get(cam_id, 0) < 1.0)
-
-                if is_device_active:
+                time.sleep(0.04)
+                if cam_id not in camera_streams:
+                     ret, buf = cv2.imencode('.jpg', offline_frame)
+                     if ret: yield (b'--frame\r\nContent-Type: image/jpeg\r\n\r\n' + buf.tobytes() + b'\r\n')
+                     time.sleep(0.5)
+                     continue
+                if time.time() - last_seen.get(cam_id, 0) < 1.0:
                     if not is_logged:
-                        print(f"✅ [연결 확정] {cam_id}")
                         send_to_gateway(cam_id, "CONNECTED")
-                        
-                        # ✨ [핵심] 연결 로그를 보낸 시점에 '인증된 시청자'로 등록
-                        verified_viewers.add(cam_id) 
+                        verified_viewers.add(cam_id)
                         is_logged = True
-                    
-                    frame = camera_streams[cam_id]
-                    ret, buffer = cv2.imencode('.jpg', frame)
-                    if ret:
-                        yield (b'--frame\r\n' b'Content-Type: image/jpeg\r\n\r\n' + buffer.tobytes() + b'\r\n')
+                    try:
+                        ret, buf = cv2.imencode('.jpg', camera_streams[cam_id])
+                        if ret: yield (b'--frame\r\nContent-Type: image/jpeg\r\n\r\n' + buf.tobytes() + b'\r\n')
+                    except: pass
                 else:
                     if is_logged:
-                        print(f"⏳ [타임아웃] {cam_id}")
                         send_to_gateway(cam_id, "DISCONNECTED")
-                        
-                        # 연결 끊김 시 인증 해제
                         if cam_id in verified_viewers: verified_viewers.remove(cam_id)
                         is_logged = False
-                        
+                    ret, buf = cv2.imencode('.jpg', offline_frame)
+                    if ret: yield (b'--frame\r\nContent-Type: image/jpeg\r\n\r\n' + buf.tobytes() + b'\r\n')
                     time.sleep(0.5)
-                time.sleep(0.04) 
-
-        except (GeneratorExit, OSError):
-            print(f"👋 [사용자 이탈] {cam_id}")
+        except: pass
         finally:
-            # 종료 시 모든 목록에서 제거
-            if cam_id in active_viewers: active_viewers.remove(cam_id)
-            if cam_id in verified_viewers: verified_viewers.remove(cam_id)
-            
-            current_device_status[cam_id] = "SAFE"
-            
-            if is_logged:
-                print(f"❌ [연결 해제] {cam_id}")
-                send_to_gateway(cam_id, "DISCONNECTED")
-
+            active_viewers.discard(cam_id)
+            verified_viewers.discard(cam_id)
+            if is_logged: send_to_gateway(cam_id, "DISCONNECTED")
     return StreamingResponse(generate(), media_type="multipart/x-mixed-replace; boundary=frame")
+
+@app.post("/update_mode/{robot_id}")
+async def update_mode(robot_id: str, mode_data: dict):
+    mode = mode_data.get("mode", "UNKNOWN")
+    send_to_gateway(robot_id, "CONTROL" if mode == "CONTROL" else "MONITOR")
+    return {"status": "success"}
+
+@app.post("/stop_monitoring/{cam_id}")
+def stop_monitoring(cam_id: str):
+    active_viewers.discard(cam_id)
+    verified_viewers.discard(cam_id)
+    device_status[cam_id] = "SAFE"
+    send_to_gateway(cam_id, "DISCONNECTED")
+    return {"status": "disconnected"}
 
 if __name__ == "__main__":
     if sys.platform == 'win32':
         from asyncio.proactor_events import _ProactorBasePipeTransport
-        def silence_event_loop_error(func):
-            @wraps(func)
-            def wrapper(*args, **kwargs):
-                try: return func(*args, **kwargs)
-                except (ConnectionResetError, OSError): pass
-            return wrapper
-        _ProactorBasePipeTransport._call_connection_lost = silence_event_loop_error(
-            _ProactorBasePipeTransport._call_connection_lost
-        )
-
+        _ProactorBasePipeTransport._call_connection_lost = lambda *args, **kwargs: None
     config = uvicorn.Config(app, host="0.0.0.0", port=PORT_ALGO, log_level="critical", access_log=False)
-    server = uvicorn.Server(config)
-
-    try:
-        server.run()
-    except (KeyboardInterrupt, asyncio.exceptions.CancelledError): pass
-    finally: os._exit(0)
+    uvicorn.Server(config).run()

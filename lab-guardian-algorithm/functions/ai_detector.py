@@ -1,8 +1,11 @@
-# ai_detector.py
+# functions/ai_detector.py
 from ultralytics import YOLO
 import cv2
 import numpy as np
-from centroidtracker import CentroidTracker 
+
+# 🔴 [수정] main.py 실행 위치 기준으로 경로 변경
+# 같은 폴더(functions) 안에 있더라도, 실행은 루트에서 하므로 전체 경로를 적어줍니다.
+from functions.centroidtracker import CentroidTracker 
 
 class AIDetector:
     def __init__(self, model_name='yolov8n.pt'):

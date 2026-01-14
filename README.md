@@ -13,21 +13,25 @@
 ![OpenCV](https://img.shields.io/badge/OpenCV-5C3EE8?style=for-the-badge&logo=opencv&logoColor=white)
 ![Socket.io](https://img.shields.io/badge/Socket.io-010101?style=for-the-badge&logo=socket.io&logoColor=white)
 
+<br/> <img src="demo.png" width="900" alt="System Demo Screenshot">
+
 </div>
 
 ---
 
 ## 📖 Project Overview
-**Lab Guardian**은 위험한 실험실 환경을 순찰하는 자율 주행 로봇(Raspbot)과 고정형 CCTV를 통합 관리하는 시스템입니다. AI 객체 탐지를 통해 위험 상황을 실시간 감지하며, 전용 **C# 게이트웨이**를 통해 모든 보안 이벤트를 데이터베이스에 체계적으로 기록합니다. 특히, 중간 서버를 거치지 않는 **로봇 직결 제어 시스템**과 **상태별 로그 분리 저장 로직**을 통해 실시간 관제 성능과 사후 추적성을 동시에 확보했습니다.
+**Lab Guardian**은 위험한 실험실 환경을 순찰하는 자율 주행 로봇(Raspbot)과 고정형 CCTV를 통합 관리하는 시스템입니다. AI 객체 탐지를 통해 위험 상황을 실시간 감지하며, **전용 C# 게이트웨이**를 통해 모든 보안 이벤트를 데이터베이스에 체계적으로 기록합니다.
 
-### ✨ 핵심 업데이트 기능 (Core Features)
-* **Integrated C# Gateway:** 모든 엣지 장치의 신호를 통합하여 WebSocket으로 브라우저에 전송하고, 동시에 SQLite DB에 이력을 남기는 고성능 관제 허브 구현.
-* **Dual-Column Log System:** CCTV 로그와 로봇 로그를 별도 컬럼에 저장하여 장치별 독립적인 이력 관리가 가능하며, `CamId`를 통한 명확한 기기 식별 지원.
-* **Real-time Connection Monitoring:** 장치의 연결 성공(`CONNECTED`) 및 종료(`DISCONNECTED`)를 실시간 감지하여 DB에 자동 기록.
-* **Operation Mode Tracking:** 사용자의 전체화면 조종(`CONTROL`) 및 자동 감시(`MONITOR`) 모드 전환 이력을 로그화하여 관제 상태 추적 가능.
-* **Smart Log Categorization:** 기기 이름(CCTV/Webcam/Robot)에 따라 웹 대시보드의 좌/우 로그 섹션으로 자동 분류되는 지능형 라우팅 로직.
-* **Direct Web-to-Robot Control:** Socket.io를 활용해 웹 브라우저에서 로봇으로 제어 신호를 직접 송신하여 초저지연 조종 성능 확보.
-* **Auto-Recovery Alarm:** 위험 감지 시 붉은색 점멸 알람이 발생하며, 10초 후 자동으로 정상 상태로 복구되는 지능형 타이머 로직.
+특히, 최신 업데이트를 통해 **자동 증거 확보(스냅샷/녹화)** 및 **텔레그램 실시간 알림** 기능을 탑재하여 관제 효율을 극대화했습니다.
+
+### ✨ 핵심 업데이트 기능 (New Features)
+* **📸 Smart Evidence Recording:** 위험 감지 시 **즉시 스냅샷**을 촬영하고 **10초간 영상을 녹화**하여 로컬 스토리지에 자동 저장.
+* **🖼️ Static Image Server:** FastAPI의 `StaticFiles`를 활용해 저장된 증거 자료를 웹 브라우저에서 URL 링크로 즉시 확인 가능한 이미지 서버 구축.
+* **📱 Real-time Telegram Alert:** 침입자 감지 시 보안 담당자의 텔레그램으로 현장 사진과 경고 메시지를 즉시 전송 (방화벽 우회 처리 적용).
+* **📂 Modular Architecture:** `main.py`의 비대화를 막기 위해 `functions/` 폴더(AI, 녹화, 알림, DB)로 핵심 로직을 분리하여 유지보수성 강화.
+* **Integrated C# Gateway:** 엣지 장치에서 전송된 `이미지 경로(Path)` 데이터를 파싱하여 SQLite DB에 메타데이터로 저장하는 고성능 허브.
+* **Dual-Column Log System:** CCTV와 로봇 로그를 분리 저장하며, 스냅샷이 포함된 로그는 웹 대시보드에서 `[📸]` 아이콘으로 표시.
+* **Auto-Recovery Alarm:** 위험 감지 시 붉은색 점멸 알람이 발생하며, 일정 쿨타임 후 자동으로 정상 상태로 복구되는 지능형 로직.
 
 ---
 
@@ -37,91 +41,102 @@
 
 ```mermaid
 graph TD
-    subgraph "Edge Devices (Robot / CCTV)"
-        A["🤖 Raspbot"] -- "aiohttp (POST)" --> C
-        B["📷 Static CCTV"] -- "aiohttp (POST)" --> C
-        A -- "Socket.io (Port: 5001)" --- F
+    subgraph "Edge Devices & AI Core"
+        A["🤖 Raspbot"] -- "Video Stream" --> C
+        B["📷 RealSense/CCTV"] -- "Video Stream" --> C
+        C["🧠 Algo Server (FastAPI)"]
+        C -- "Save MP4/JPG" --> S["📂 Local Storage (recordings/)"]
+        C -- "Send Photo" --> T["📱 Telegram Bot"]
     end
 
-    subgraph "Core Data & Control Hub"
-        C["🧠 Algo Server (FastAPI)"] -- "TCP Message" --> G
-        G["🚀 C# Gateway"] -- "Save Log" --> DB[("SQLite DB")]
-        G -- "WebSocket (Port: 8080)" --> F
+    subgraph "Data & Control Hub"
+        C -- "TCP (Log + Image Path)" --> G["🚀 C# Gateway"]
+        G -- "Insert Metadata" --> DB[("SQLite DB")]
+        G -- "WebSocket (JSON)" --> F
     end
 
-    subgraph "Control Center (Dashboard)"
-        F["💻 React Web"] -- "MJPEG Stream" --> F
-        F -- "Direct Control Cmd" --> A
-        F -- "Mode Update (POST)" --> C
+    subgraph "Control Center"
+        F["💻 React Web"] -- "View Stream" --> C
+        F -- "Fetch Image" --> S
+        F -- "Direct Control" --> A
     end
 ```
 
-</div>
-</div>
-
 ---
-
-</div>
-</div>
 
 ## 2. Standardized Event Flow (이벤트 흐름)
 모든 이벤트는 일관된 메시지 포맷으로 처리되어 DB와 웹에 동일하게 기록됩니다.
 
 | **상태 \(Status\)** | **내용 \(Message\)** | **비고**             |
 |-------------------|--------------------|--------------------|
-| DANGER            | 🚨 침입자 감지\!        | 즉시 DB 저장 및 웹 점멸 알람 |
+| DANGER            | 🚨 침입자 감지! (📸 스냅샷)        | 이미지 경로 포함, 즉시 텔레그램 전송 및 녹화 시작 |
 | SAFE              | ✅ 이상 없음 \(정기 보고\)  | 10분 주기 하트비트 보고     |
 | CONNECTED         | 🌐 장치 연결 성공        | 장치 최초 접속 시 기록      |
 | DISCONNECTED      | ❌ 장치 연결 끊김         | 5초 이상 신호 부재 시 기록   |
 | CONTROL           | 🎮 조종 모드 진입        | 전체화면 조종 시 기록       |
 | MONITOR           | 🛡️ 감시 모드 복귀       | 전체화면 해제 시 기록       |
 
-</div>
-</div>
-
 ---
-
-</div>
-</div>
 
 ## 💡 Technical Decisions (기술적 의사결정)
-### 1. C# 기반 통합 게이트웨이 및 SQLite 연동
-데이터의 무결성과 실시간 전송을 위해 멀티스레딩에 강한 C#으로 게이트웨이를 구축했습니다. Fleck 라이브러리를 활용한 WebSocket 통신과 Entity Framework Core를 활용한 SQLite 연동으로 고부하 상황에서도 안정적인 로그 저장을 보장합니다.
 
-### 2. 정밀 로그 분리 로직 (CctvLog vs RobotLog)
-단일 로그 테이블에서 발생하던 기기 식별의 혼란을 방지하기 위해, 수신된 `deviceId` 키워드를 분석하여 해당 컬럼에만 로그를 남기고 반대편은 `NULL`로 처리하는 로직을 구현했습니다. 이를 통해 데이터베이스의 가독성과 분석 효율을 극대화했습니다.
+### 1. 하이브리드 저장 전략 (Hybrid Storage Strategy)
+> **"Why store paths, not blobs?"**
 
-### 3. aiohttp 기반의 비동기 데이터 파이프라인
-기존 동기 전송 방식의 성능 병목을 해결하기 위해 `aiohttp`와 `asyncio`를 도입했습니다. 영상 전송과 로봇 제어를 병렬 처리함으로써, 매끄러운 주행과 고화질 스트리밍을 동시에 달성했습니다.
-</div>
-</div>
+이미지 파일(Binary) 자체를 DB에 저장할 경우 데이터베이스 용량이 급증하여 조회 속도가 저하됩니다. 이를 방지하기 위해 **대용량 미디어 파일은 로컬 디스크(`recordings/`)에 저장**하고, **SQLite DB에는 해당 파일의 경로(`SnapshotPath`)만 텍스트로 저장**하는 효율적인 구조를 채택했습니다.
+
+### 2. 기능과 실행의 분리 (Separation of Concerns)
+초기 단일 파일(`main.py`)로 구성된 서버 코드를 유지보수성을 위해 기능별로 모듈화했습니다.
+* `functions/ai_detector.py`: YOLOv8 객체 탐지 및 추적
+* `functions/recorder.py`: 스레드 기반 비동기 영상 녹화 및 스냅샷 관리
+* `functions/notifier.py`: 텔레그램 API 연동 및 예외 처리
+* `main.py`: FastAPI 라우팅 및 전체 프로세스 오케스트레이션
+
+### 3. C# 기반 통합 게이트웨이
+데이터 무결성을 위해 멀티스레딩에 강한 C#으로 게이트웨이를 구축했습니다. Python에서 TCP로 전송한 `ID:메시지:이미지경로` 형태의 패킷을 파싱하여, 경로가 존재할 경우에만 DB의 `SnapshotPath` 컬럼에 기록하도록 설계되었습니다.
 
 ---
 
-</div>
-</div>
+## 📂 Project Structure (Updated)
 
-## 🚀 Getting Started (통합 실행 가이드)
-### 1️⃣ C# 게이트웨이 (Hub)
 ```bash
-# dotnet CLI 환경에서 실행
-cd lab-guardian-gateway
-dotnet run
-# Port: 8888 (TCP), 8080 (WS)
+root/
+├── lab-guardian-gateway/    # C# 통합 게이트웨이
+│   ├── Program.cs           # TCP 패킷 파싱 및 DB 저장 로직
+│   └── LogDatabase.db       # SQLite (SnapshotPath 컬럼 포함)
+│
+├── lab-guardian-algorithm/  # AI 처리 및 미디어 서버
+│   ├── main.py              # FastAPI 서버 진입점
+│   ├── recordings/          # 📸 스냅샷 및 녹화 영상 저장소 (자동 생성)
+│   └── functions/           # 🧩 핵심 기능 모듈화
+│       ├── ai_detector.py   # YOLO & CentroidTracker
+│       ├── recorder.py      # 영상 저장 및 경로 반환 로직
+│       ├── notifier.py      # 텔레그램 봇 알림
+│       └── centroidtracker.py
+│
+└── lab-guardian-web/        # React 관제 대시보드
+    └── src/App.tsx          # 로그 내 이미지 아이콘 렌더링 지원
 ```
 
-</div>
+---
+
+## 🚀 Getting Started
+
+### 1️⃣ C# 게이트웨이 (Hub)
+```bash
+cd lab-guardian-gateway
+# DB 스키마가 변경되었으므로 기존 .db 파일 삭제 후 실행 권장
+dotnet run
+```
 
 ### 2️⃣ 알고리즘 서버 (AI Server)
 ```bash
 cd lab-guardian-algorithm
+# 필수 라이브러리 설치 (ultralytics, opencv, etc.)
 pip install -r requirements.txt
-# AI 탐지 및 10분 주기 SAFE 보고 활성화
+# 서버 실행
 python main.py
-python multi_cam_agent.py
 ```
-
-</div>
 
 ### 3️⃣ 웹 대시보드 (React)
 ```bash
@@ -129,8 +144,6 @@ cd lab-guardian-web
 npm install
 npm run dev
 ```
-
-</div>
 
 ### 4️⃣ 로봇 시스템 (Raspberry Pi 환경)
 로봇 가동을 위해 `lab-guardian-robot` 폴더를 라즈베리파이로 이동시킨 후 다음 과정을 진행합니다.
@@ -144,60 +157,37 @@ python raspbot_setup/py_install/setup.py
 python main_server.py
 ```
 
-</div>
-</div>
-
 ---
-
-</div>
-</div>
-
-## 📂 Project Structure
-```bash
-root/
-├── lab-guardian-gateway/    # C# 통합 게이트웨이 (Fleck, EF Core)
-│   ├── Program.cs           # DB 저장 및 WebSocket 브로드캐스트 로직
-│   └── LogDatabase.db       # 보안 이벤트 로그 저장소 (SQLite)
-│
-├── lab-guardian-algorithm/  # AI 처리 서버 (FastAPI)
-│   ├── main.py              # 프레임 분석, 상태(DANGER/SAFE) 보고 및 API
-│   └── ai_detector.py       # YOLO 기반 객체 탐지 및 추적 엔진
-│
-└── lab-guardian-web/        # React 관제 대시보드 (MUI)
-    └── src/App.tsx          # 좌(CCTV)/우(Robot) 로그 자동 분류 및 조종 로직
-```
-
-</div>
-</div>
-
----
-
-</div>
-</div>
 
 ## 🛠️ Troubleshooting (해결 사례)
 
-+ **DB 파일 잠금 및 완전 초기화**
+### 1. Hardware & Network (하드웨어 및 네트워크)
++ **RealSense `ERR_INCOMPLETE_CHUNKED_ENCODING` 및 연결 끊김**
+    + **현상:** 웹캠은 정상 작동하나, RealSense 카메라 연결 시 스트리밍이 즉시 중단되거나 브라우저 콘솔에 인코딩 에러 발생.
+    + **원인:** USB 2.0 포트의 전력 부족 및 640x480 해상도의 높은 대역폭으로 인한 데이터 병목 현상.
+    + **해결:** 해상도를 **320x240으로 최적화**하여 대역폭을 확보하고, **USB 3.0 포트 연결**을 강제하여 하드웨어 안정성을 확보했습니다.
 
-서버 종료 후 .db, .db-shm, .db-wal 파일을 모두 삭제하여 데이터 정합성 문제 해결 및 클린 초기화를 수행하는 가이드를 구축했습니다.
+### 2. Backend Logic (백엔드 로직)
++ **이중 로그 발생 및 이미지 경로 누락 (NULL)**
+    + **현상:** 위험 감지 시 로그가 2번 전송되며, 정작 중요한 스냅샷 로그에는 이미지 경로가 `NULL`로 기록되는 현상.
+    + **원인:** '상태 변경(SAFE→DANGER)' 로직과 '알림 전송' 로직이 분리되어 있어 발생한 경쟁 조건(Race Condition).
+    + **해결:** `main.py`의 로직을 통합하여, 위험 감지 시 **이미지 경로 생성 후 단일 패킷**으로 게이트웨이에 전송하도록 구조를 개선했습니다.
 
-+ **터미널 제어권 반환 및 프로세스 관리**
++ **모듈 리팩토링에 따른 `ModuleNotFoundError`**
+    + **현상:** `main.py`의 비대화를 막기 위해 `functions/` 폴더로 파일을 분리한 후 `centroidtracker`를 찾지 못하는 에러 발생.
+    + **해결:** Python의 실행 컨텍스트(Project Root)를 고려하여 `from functions.centroidtracker import ...`로 절대 경로 임포트 방식을 적용해 의존성 문제를 해결했습니다.
 
-서버 종료 시 백그라운드 스레드 점유 문제를 stop_event와 os._exit(0) 도입으로 해결하여 즉각적인 프롬프트 반환을 보장했습니다.
++ **FastAPI 정적 파일(Image) 404 에러**
+    + **현상:** 이미지는 서버에 저장되었으나 웹에서 엑스박스(Not Found)가 뜨는 문제.
+    + **해결:** FastAPI의 `StaticFiles`를 사용하여 `/recordings` 디렉토리를 마운트하고, DB 저장 시 로컬 경로가 아닌 **웹 접근 가능한 URL 경로**를 반환하도록 `recorder.py`를 수정했습니다.
 
-+ **로그 실시간 분류 오류**
+### 3. System & Environment (시스템 및 환경)
++ **WinError 10054 (ConnectionResetError) 핸들링**
+    + **현상:** 윈도우 환경에서 `asyncio` 이벤트 루프 종료 시 이미 닫힌 소켓에 접근하여 대량의 예외 로그 발생.
+    + **해결:** `uvicorn` 실행 시 `_ProactorBasePipeTransport`의 연결 소실 콜백을 래핑(Wrapping)하여 불필요한 종료 로그를 무시하도록 패치했습니다.
 
-React onmessage 내 기기 키워드(CCTV/WEBCAM) 필터링 로직 보완을 통해 로봇 로그가 CCTV 창에 섞이는 문제를 해결했습니다.
-
-+ **비동기 영상 전송 딜레이**
-
-main_server.py의 asyncio.sleep() 조정을 통해 주행 제어와 스트리밍 간의 성능 최적화를 달성했습니다.
-
-+ **WinError 10054 (ConnectionResetError)**
-
-    + 현상: 윈도우 환경에서 asyncio 루프가 이미 닫힌 소켓을 종료하려 할 때 로그에 대량의 예외 발생.
-
-    + 해결: _ProactorBasePipeTransport의 연결 소실 콜백에 래퍼(Wrapper)를 씌워 불필요한 예외 로그를 무시하도록 패치하여 서버 안정성을 확보했습니다.
++ **DB 파일 잠금(Locking) 방지**
+    + **해결:** C# 게이트웨이와 Python 서버 간의 DB 접근 충돌을 방지하기 위해, 게이트웨이(C#)가 DB 쓰기 권한을 전담하고 Python은 TCP 메시지만 전송하는 **단방향 아키텍처**를 수립했습니다.
 
 ---
 

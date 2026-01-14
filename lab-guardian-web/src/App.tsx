@@ -81,53 +81,72 @@ function App() {
 
     ws.onmessage = (event) => {
       try {
+        // 1. [디버깅] 들어오는 데이터 콘솔에 출력 (이걸로 데이터 오는지 확인!)
+        console.log("📩 WS 수신:", event.data); 
+
         const data = JSON.parse(event.data);
-        const { status, message, time, camId } = data;
+        // C#에서 보낸 키값: status, message, time, camId, snapshot
+        const { status, message, time, camId, snapshot } = data;
         
-        // 1. 장치 ID 추출 및 정규화 (비교를 위해 대문자 변환)
         const deviceId = camId || 'Unknown';
         const normalizedId = deviceId.toUpperCase();
 
-        // 2. 디바이스 목록 상태 업데이트
-        setDevices(prev => prev.map(d => {
-            if (d.id.toUpperCase() === normalizedId && d.status !== status) {
-                return { ...d, status: status as DeviceStatus };
-            }
-            return d;
-        }));
+        // 2. 상태 업데이트 (테두리 색상 변경용)
+        setDevices(prev => {
+           // 이미 등록된 장치인지 확인
+           const exists = prev.find(d => d.id.toUpperCase() === normalizedId);
+           if (exists) {
+             return prev.map(d => {
+               if (d.id.toUpperCase() === normalizedId && d.status !== status) {
+                 return { ...d, status: status as DeviceStatus };
+               }
+               return d;
+             });
+           } else {
+             // 없으면 새로 추가 (자동 등록 기능)
+             const type = (normalizedId.includes('CCTV') || normalizedId.includes('WEBCAM')) ? 'CCTV' : 'ROBOT';
+             return [...prev, { id: deviceId, name: deviceId, status: status as DeviceStatus, type }];
+           }
+        });
 
-        // 3. [핵심] 키워드 기반 범용 로그 분류 로직
+        // 3. 로그 메시지 구성
+        let emoji = 'ℹ️';
+        if (status === 'DANGER') emoji = '🚨';
+        else if (status === 'SAFE') emoji = '✅';
+        else if (status === 'CONNECTED') emoji = '🌐';
+        else if (status === 'DISCONNECTED') emoji = '❌';
+
+        // 로그 객체 생성 (단순 문자열 대신 객체로 관리하면 클릭 기능 넣기 좋음)
+        // 여기선 기존 호환성을 위해 문자열에 특수코드를 섞거나 HTML을 쓸 수 없으니
+        // 일단 텍스트로 표현하되, 스냅샷이 있으면 [📸 VIEW] 문구를 뒤에 붙임
+        let displayMsg = `[${time}] ${emoji} ${message}`;
+        
+        // 🚀 만약 스냅샷 경로가 있다면? (중요)
+        if (snapshot) {
+            displayMsg += " ||SNAPSHOT||" + snapshot; // 나중에 렌더링할 때 분리해서 쓸 구분자
+        }
+
+        // 4. 로그 분류 및 저장
+        const isStaticCctv = normalizedId.includes('CCTV') || normalizedId.includes('WEBCAM');
+
+        if (isStaticCctv) {
+          setCctvDisplayLogs(prev => [displayMsg, ...prev].slice(0, 50));
+        } else {
+          setRobotDisplayLogs(prev => [displayMsg, ...prev].slice(0, 50));
+        }
+
+        // 5. 알람 해제 타이머
         if (status === 'DANGER') {
-            const logMsg = `[${time}] 🚨 ${message}`;
-            
-            // 💡 분류 기준: 이름에 CCTV 또는 WEBCAM이 포함되어 있는가?
-            const isStaticCctv = normalizedId.includes('CCTV') || normalizedId.includes('WEBCAM');
-
-            if (isStaticCctv) {
-              // ✅ CCTV_RealSense_999, CCTV_Webcam_202 등은 왼쪽으로
-              setCctvDisplayLogs(prev => {
-                if (prev[0] === logMsg) return prev; 
-                return [logMsg, ...prev].slice(0, 50);
-              });
-            } else {
-              // ✅ 그 외 모든 장치(ROBOT_1, ROBOT_2, 기타 등등)는 오른쪽으로
-              setRobotDisplayLogs(prev => {
-                if (prev[0] === logMsg) return prev; 
-                return [logMsg, ...prev].slice(0, 50);
-              });
-            }
-
-            // 알람 해제 타이머 (10초 후 IDLE 복구)
             if (alertTimers.current[deviceId]) window.clearTimeout(alertTimers.current[deviceId]);
             alertTimers.current[deviceId] = window.setTimeout(() => {
                 setDevices(curr => curr.map(d => d.id === deviceId ? { ...d, status: 'IDLE' } : d));
             }, 10000);
         }
+
       } catch (e) {
-        console.warn("Log processing error:", e);
+        console.error("❌ 로그 파싱 에러:", e);
       }
     };
-
     ws.onclose = () => {};
     return () => { ws.close(); };
   }, []);

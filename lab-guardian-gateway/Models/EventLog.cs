@@ -10,6 +10,10 @@ public class EventLog {
     public DateTime CreatedAt { get; set; } = DateTime.Now;
     public string? CctvLog { get; set; }
     public string? RobotLog { get; set; }
+    
     [Required]
     public string CamId { get; set; } = string.Empty;
+
+    // 🚀 [추가] 이미지 경로 저장용 컬럼
+    public string? SnapshotPath { get; set; } 
 }

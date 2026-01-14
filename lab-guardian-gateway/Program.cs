@@ -65,11 +65,17 @@ while (true)
                 // 1. 데이터 파싱
                 string deviceId = "Unknown";
                 string status = "SAFE";
+                string? imagePath = null; // 🚀 [추가] 이미지 경로 변수
 
                 if (rawData.Contains(':')) {
-                    string[] parts = rawData.Split(':');
+                    string[] parts = rawData.Split(':', 3);
                     deviceId = parts.Length > 0 ? parts[0] : "Unknown";
                     status = parts.Length > 1 ? parts[1] : "SAFE";
+                    
+                    // 🚀 [추가] 3번째 데이터가 있으면 이미지 경로로 인식
+                    if (parts.Length > 2) {
+                        imagePath = parts[2];
+                    }
                 }
 
                 // 2. 메시지 생성
@@ -83,12 +89,16 @@ while (true)
                     _ => status
                 };
 
+                // 로그 메시지에 (사진 포함) 표시
+                if (!string.IsNullOrEmpty(imagePath)) {
+                    displayMsg += " (📸 스냅샷 저장됨)";
+                }
+
                 string finalLogEntry = $"[{status}] {displayMsg}";
 
                 // 3. DB 저장 및 웹소켓 전송
                 try {
                     using (var db = new LabDbContext()) {
-                        // Null 체크 (deviceId가 null일 경우 대비)
                         deviceId ??= "Unknown";
                         bool isCctv = deviceId.ToUpper().Contains("CCTV") || deviceId.ToUpper().Contains("WEBCAM");
                         
@@ -96,7 +106,8 @@ while (true)
                             CamId = deviceId,
                             CreatedAt = DateTime.Now,
                             CctvLog = isCctv ? finalLogEntry : null,
-                            RobotLog = !isCctv ? finalLogEntry : null
+                            RobotLog = !isCctv ? finalLogEntry : null,
+                            SnapshotPath = imagePath // 🚀 [추가] DB에 경로 저장
                         };
 
                         db.EventLogs.Add(newLog);
@@ -105,20 +116,21 @@ while (true)
                         // 콘솔 출력
                         Console.ForegroundColor = status == "DANGER" ? ConsoleColor.Red : ConsoleColor.Yellow;
                         Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] ✅ [DB 저장] {deviceId}: {displayMsg}");
+                        if(!string.IsNullOrEmpty(imagePath)) Console.WriteLine($"   └─ 🖼️ 경로: {imagePath}");
                         Console.ResetColor();
 
-                        // 4. 웹소켓 실시간 전송
+                        // 4. 웹소켓 실시간 전송 (프론트엔드로 이미지 경로도 같이 보냄)
                         var jsonPayload = JsonSerializer.Serialize(new {
                             status = status,
                             camId = deviceId,
                             message = finalLogEntry,
-                            time = newLog.CreatedAt.ToString("HH:mm:ss")
+                            time = newLog.CreatedAt.ToString("HH:mm:ss"),
+                            snapshot = imagePath // 🚀 [추가] 프론트에서 <img src=...> 에 쓸 경로
                         });
 
                         foreach (var socket in allSockets.ToList()) {
                             if (socket.IsAvailable) 
                             {
-                                // [수정 2] CS4014 해결: 비동기 결과를 기다리지 않음을 명시 (Discard)
                                 _ = socket.Send(jsonPayload);
                             }
                         }
