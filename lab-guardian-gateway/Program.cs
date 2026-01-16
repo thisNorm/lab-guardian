@@ -4,10 +4,10 @@ using System.Text;
 using System.Text.Json;
 using lab_guardian_gateway.Data;
 using lab_guardian_gateway.Models;
-using lab_guardian_gateway.Services;
 using Fleck;
+using StackExchange.Redis;
 
-// 1. DB 설정 및 초기화
+// 1. DB 설정 (초기화용)
 string dbName = "LogDatabase.db";
 string baseDirectory = @"C:\Users\kisoo\Desktop\lab-guardian\lab-guardian-gateway";
 string dbFullPath = Path.Combine(baseDirectory, dbName);
@@ -29,11 +29,16 @@ websocketServer.Start(socket => {
     socket.OnClose = () => allSockets.Remove(socket);
 });
 
+// 🚀 [핵심 수정 1] Redis 연결 (서버 시작 시 1회만 연결)
+// 매 요청마다 DB를 여는 대신, 미리 열어둔 Redis 파이프라인을 사용함
+var redisMux = ConnectionMultiplexer.Connect("127.0.0.1:6379");
+var redisDb = redisMux.GetDatabase();
+
 var listener = new TcpListener(IPAddress.Any, 8888);
 listener.Start();
 
 Console.WriteLine("--------------------------------------------------");
-Console.WriteLine("🚀 게이트웨이 통합 관제 시작 (Warning Free Ver)");
+Console.WriteLine("🚀 게이트웨이 통합 관제 시작 (Redis Buffered Ver)");
 Console.WriteLine("--------------------------------------------------");
 
 while (true)
@@ -42,12 +47,8 @@ while (true)
     
     _ = Task.Run(async () => {
         try {
-            // [수정 1] CS8600, CS8602 해결: Null 안전 접근
-            // RemoteEndPoint가 null이면 "Unknown"을 넣도록 처리
             var endPoint = client.Client.RemoteEndPoint as IPEndPoint;
             string clientIp = endPoint?.Address.ToString() ?? "Unknown";
-            
-            // Console.WriteLine($"[DEBUG] 접속 감지: {clientIp}");
 
             using var stream = client.GetStream();
             var buffer = new byte[2048];
@@ -59,23 +60,18 @@ while (true)
 
                 string rawData = Encoding.UTF8.GetString(buffer, 0, n).Trim();
                 
-                // HTTP 요청 필터링
                 if (string.IsNullOrEmpty(rawData) || rawData.StartsWith("GET") || rawData.Contains("HTTP")) continue; 
 
                 // 1. 데이터 파싱
                 string deviceId = "Unknown";
                 string status = "SAFE";
-                string? imagePath = null; // 🚀 [추가] 이미지 경로 변수
+                string? imagePath = null;
 
                 if (rawData.Contains(':')) {
                     string[] parts = rawData.Split(':', 3);
                     deviceId = parts.Length > 0 ? parts[0] : "Unknown";
                     status = parts.Length > 1 ? parts[1] : "SAFE";
-                    
-                    // 🚀 [추가] 3번째 데이터가 있으면 이미지 경로로 인식
-                    if (parts.Length > 2) {
-                        imagePath = parts[2];
-                    }
+                    if (parts.Length > 2) imagePath = parts[2];
                 }
 
                 // 2. 메시지 생성
@@ -89,59 +85,53 @@ while (true)
                     _ => status
                 };
 
-                // 로그 메시지에 (사진 포함) 표시
-                if (!string.IsNullOrEmpty(imagePath)) {
-                    displayMsg += " (📸 스냅샷 저장됨)";
-                }
-
+                if (!string.IsNullOrEmpty(imagePath)) displayMsg += " (📸 스냅샷 저장됨)";
                 string finalLogEntry = $"[{status}] {displayMsg}";
 
-                // 3. DB 저장 및 웹소켓 전송
+                // 3. Redis 버퍼링 및 웹소켓 전송
                 try {
-                    using (var db = new LabDbContext()) {
-                        deviceId ??= "Unknown";
-                        bool isCctv = deviceId.ToUpper().Contains("CCTV") || deviceId.ToUpper().Contains("WEBCAM");
-                        
-                        var newLog = new EventLog {
-                            CamId = deviceId,
-                            CreatedAt = DateTime.Now,
-                            CctvLog = isCctv ? finalLogEntry : null,
-                            RobotLog = !isCctv ? finalLogEntry : null,
-                            SnapshotPath = imagePath // 🚀 [추가] DB에 경로 저장
-                        };
+                    deviceId ??= "Unknown";
+                    bool isCctv = deviceId.ToUpper().Contains("CCTV") || deviceId.ToUpper().Contains("WEBCAM");
+                    
+                    var newLog = new EventLog {
+                        CamId = deviceId,
+                        CreatedAt = DateTime.Now,
+                        CctvLog = isCctv ? finalLogEntry : null,
+                        RobotLog = !isCctv ? finalLogEntry : null,
+                        SnapshotPath = imagePath
+                    };
 
-                        db.EventLogs.Add(newLog);
-                        await db.SaveChangesAsync();
+                    // 🚀 [핵심 수정 2] DB 직접 저장(Lock 유발) 코드 제거 -> Redis 큐(List)에 적재
+                    // Write-Back 패턴: 여기서 Redis에 넣으면, 별도의 Worker가 나중에 꺼내서 DB에 저장함
+                    string jsonLog = JsonSerializer.Serialize(newLog);
+                    await redisDb.ListRightPushAsync("event_queue", jsonLog);
 
-                        // 콘솔 출력
-                        Console.ForegroundColor = status == "DANGER" ? ConsoleColor.Red : ConsoleColor.Yellow;
-                        Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] ✅ [DB 저장] {deviceId}: {displayMsg}");
-                        if(!string.IsNullOrEmpty(imagePath)) Console.WriteLine($"   └─ 🖼️ 경로: {imagePath}");
-                        Console.ResetColor();
+                    // 콘솔 출력
+                    Console.ForegroundColor = status == "DANGER" ? ConsoleColor.Red : ConsoleColor.Yellow;
+                    Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] 🚀 [Redis 적재] {deviceId}: {displayMsg}");
+                    if(!string.IsNullOrEmpty(imagePath)) Console.WriteLine($"   └─ 🖼️ 경로: {imagePath}");
+                    Console.ResetColor();
 
-                        // 4. 웹소켓 실시간 전송 (프론트엔드로 이미지 경로도 같이 보냄)
-                        var jsonPayload = JsonSerializer.Serialize(new {
-                            status = status,
-                            camId = deviceId,
-                            message = finalLogEntry,
-                            time = newLog.CreatedAt.ToString("HH:mm:ss"),
-                            snapshot = imagePath // 🚀 [추가] 프론트에서 <img src=...> 에 쓸 경로
-                        });
+                    // 4. 웹소켓 실시간 전송 (UI 업데이트용)
+                    var jsonPayload = JsonSerializer.Serialize(new {
+                        status = status,
+                        camId = deviceId,
+                        message = finalLogEntry,
+                        time = newLog.CreatedAt.ToString("HH:mm:ss"),
+                        snapshot = imagePath
+                    });
 
-                        foreach (var socket in allSockets.ToList()) {
-                            if (socket.IsAvailable) 
-                            {
-                                _ = socket.Send(jsonPayload);
-                            }
-                        }
+                    foreach (var socket in allSockets.ToList()) {
+                        if (socket.IsAvailable) _ = socket.Send(jsonPayload);
                     }
-                } catch (Exception dbEx) {
-                    Console.WriteLine($"❌ [DB 오류] {deviceId}: {dbEx.Message}");
+
+                } catch (Exception ex) {
+                    Console.WriteLine($"❌ [오류] {deviceId}: {ex.Message}");
                 }
             }
         }
         catch (Exception) { 
-            // 연결 종료 시 조용히 처리
+            // 연결 종료 처리
         }
         finally {
             client.Close();
