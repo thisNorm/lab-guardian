@@ -4,6 +4,8 @@ using System.Text;
 using System.Text.Json;
 using lab_guardian_gateway.Data;
 using lab_guardian_gateway.Models;
+using lab_guardian_gateway.Services;
+using lab_guardian_gateway.Workers;
 using Fleck;
 using StackExchange.Redis;
 
@@ -33,6 +35,12 @@ websocketServer.Start(socket => {
 // 매 요청마다 DB를 여는 대신, 미리 열어둔 Redis 파이프라인을 사용함
 var redisMux = ConnectionMultiplexer.Connect("127.0.0.1:6379");
 var redisDb = redisMux.GetDatabase();
+var queueMetrics = new RedisQueueMetrics(redisDb);
+var backlogCache = new RedisQueueBacklogCache(redisDb);
+var workerCts = new CancellationTokenSource();
+_ = Task.Run(() => RunWithRestartAsync("Metrics", () => queueMetrics.RunLogLoopAsync(workerCts.Token), workerCts.Token));
+_ = Task.Run(() => RunWithRestartAsync("Worker", () => new RedisEventWorker(redisDb, queueMetrics).RunAsync(workerCts.Token), workerCts.Token));
+_ = Task.Run(() => RunWithRestartAsync("BacklogCache", () => backlogCache.RunAsync(workerCts.Token), workerCts.Token));
 
 var listener = new TcpListener(IPAddress.Any, 8888);
 listener.Start();
@@ -91,6 +99,7 @@ while (true)
                 // 3. Redis 버퍼링 및 웹소켓 전송
                 try {
                     deviceId ??= "Unknown";
+                    bool isDanger = status.Equals("DANGER", StringComparison.OrdinalIgnoreCase);
                     bool isCctv = deviceId.ToUpper().Contains("CCTV") || deviceId.ToUpper().Contains("WEBCAM");
                     
                     var newLog = new EventLog {
@@ -104,11 +113,28 @@ while (true)
                     // 🚀 [핵심 수정 2] DB 직접 저장(Lock 유발) 코드 제거 -> Redis 큐(List)에 적재
                     // Write-Back 패턴: 여기서 Redis에 넣으면, 별도의 Worker가 나중에 꺼내서 DB에 저장함
                     string jsonLog = JsonSerializer.Serialize(newLog);
-                    await redisDb.ListRightPushAsync("event_queue", jsonLog);
+                    string queueKey = isDanger ? RedisQueueConfig.DangerQueue : RedisQueueConfig.EventQueue;
+
+                    // DB 스톨 방지: backlog 임계치 이상이면 저중요 로그만 드랍 (DANGER는 보존)
+                    bool shouldEnqueue = true;
+                    if (!isDanger) {
+                        if (backlogCache.EventBacklog >= RedisQueueConfig.BacklogThreshold) {
+                            queueMetrics.IncrementDropped(status);
+                            shouldEnqueue = false;
+                        }
+                    }
+
+                    if (shouldEnqueue) {
+                        await redisDb.ListRightPushAsync(queueKey, jsonLog);
+                    }
 
                     // 콘솔 출력
-                    Console.ForegroundColor = status == "DANGER" ? ConsoleColor.Red : ConsoleColor.Yellow;
-                    Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] 🚀 [Redis 적재] {deviceId}: {displayMsg}");
+                    Console.ForegroundColor = isDanger ? ConsoleColor.Red : ConsoleColor.Yellow;
+                    if (shouldEnqueue) {
+                        Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] 🚀 [Redis 적재] {deviceId}: {displayMsg}");
+                    } else {
+                        Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] 🚀 [Redis 드랍] {deviceId}: {displayMsg}");
+                    }
                     if(!string.IsNullOrEmpty(imagePath)) Console.WriteLine($"   └─ 🖼️ 경로: {imagePath}");
                     Console.ResetColor();
 
@@ -137,4 +163,16 @@ while (true)
             client.Close();
         }
     });
+}
+
+static async Task RunWithRestartAsync(string name, Func<Task> runAsync, CancellationToken ct) {
+    while (!ct.IsCancellationRequested) {
+        try {
+            await runAsync();
+            return;
+        } catch (Exception ex) {
+            Console.WriteLine($"[{name} crashed] {ex.Message}");
+            await Task.Delay(TimeSpan.FromSeconds(1), ct);
+        }
+    }
 }
