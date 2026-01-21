@@ -121,10 +121,7 @@ function App() {
         // 일단 텍스트로 표현하되, 스냅샷이 있으면 [📸 VIEW] 문구를 뒤에 붙임
         let displayMsg = `[${time}] ${emoji} ${message}`;
         
-        // 🚀 만약 스냅샷 경로가 있다면? (중요)
-        if (snapshot) {
-            displayMsg += " ||SNAPSHOT||" + snapshot; // 나중에 렌더링할 때 분리해서 쓸 구분자
-        }
+        // 스냅샷 경로는 별도 데이터로 유지하고, 로그 문구에는 포함하지 않음
 
         // 4. 로그 분류 및 저장
         const isStaticCctv = normalizedId.includes('CCTV') || normalizedId.includes('WEBCAM');

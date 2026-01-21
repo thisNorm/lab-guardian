@@ -93,7 +93,7 @@ while (true)
                     _ => status
                 };
 
-                if (!string.IsNullOrEmpty(imagePath)) displayMsg += " (📸 스냅샷 저장됨)";
+                // 로그 길이 축소: 스냅샷 메시지는 UI 로그에 포함하지 않음
                 string finalLogEntry = $"[{status}] {displayMsg}";
 
                 // 3. Redis 버퍼링 및 웹소켓 전송
