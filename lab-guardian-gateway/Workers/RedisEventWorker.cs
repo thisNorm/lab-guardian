@@ -88,14 +88,16 @@ public sealed class RedisEventWorker {
             await db.SaveChangesAsync(ct);
         } catch (Exception ex) {
             // DB 저장 실패 이벤트는 유실 대신 DLQ로 격리한다(자동 재처리는 하지 않음).
+            // DLQ 적재까지 실패한 경우에만 최종 유실로 간주한다(best-effort).
             _metrics.IncrementDropped("db_error");
-            Console.WriteLine($"[Worker] DB save failed, moving batch to DLQ: {ex.Message}");
+            Console.WriteLine($"[Worker] DB save failed, isolating batch to DLQ (final drop only if DLQ push fails): {ex.Message}");
 
             foreach (var log in batch) {
                 try {
                     string json = JsonSerializer.Serialize(log);
                     await _redis.ListRightPushAsync(RedisQueueConfig.DlqQueue, json);
-                    _metrics.IncrementDropped("moved_to_dlq");
+                    // DLQ 격리는 유실이 아니라 격리(isolation)임.
+                    _metrics.IncrementDropped("isolated_to_dlq");
                 } catch {
                     _metrics.IncrementDropped("dlq_push_failed");
                 }
