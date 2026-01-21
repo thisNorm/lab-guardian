@@ -20,8 +20,8 @@ class AIDetector:
         프레임을 분석하고, '사람(Person)' 객체의 ID 리스트를 반환합니다.
         """
         # 🚀 [핵심 수정 1] classes=[0] -> 사람(0번)만 탐지하도록 강제
-        # 🚀 [핵심 수정 2] conf=0.6 -> 확신이 60% 이상일 때만 탐지 (오탐지 제거)
-        results = self.model(frame, verbose=False, classes=[0], conf=0.6)
+        # 🚀 [핵심 수정 2] conf=0.5 -> 확신이 50% 이상일 때만 탐지
+        results = self.model(frame, verbose=False, classes=[0], conf=0.5)
         
         # YOLO가 그린 그림 (사람만 그려져 있음)
         annotated_frame = results[0].plot()

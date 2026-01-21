@@ -45,6 +45,7 @@ last_heartbeat = {}
 device_status = {}
 active_viewers = set()
 verified_viewers = set()
+monitoring_enabled = set()
 last_alert_times = {}
 ALERT_COOLDOWN = 30
 
@@ -78,8 +79,10 @@ async def upload_frame(robot_id: str, file: UploadFile = File(...)):
         current_time = time.time()
         last_seen[robot_id] = current_time
 
-        if robot_id not in active_viewers:
-            camera_streams[robot_id] = frame
+        # 스트리밍용 프레임은 항상 최신으로 유지
+        camera_streams[robot_id] = frame
+        # 감시 활성 상태가 아니라면 탐지/알림은 생략 (스트림 연결과 분리)
+        if robot_id not in monitoring_enabled:
             return {"status": "ignored"}
 
         annotated_frame, new_ids, _ = detector.detect_and_track(robot_id, frame)
@@ -115,7 +118,9 @@ async def upload_frame(robot_id: str, file: UploadFile = File(...)):
 
         camera_streams[robot_id] = annotated_frame
         return {"status": "ok"}
-    except: return {"status": "error"}
+    except Exception as e:
+        print(f"❌ [upload_frame 오류] {robot_id}: {e}")
+        return {"status": "error"}
 
 @app.get("/video_feed/{cam_id}")
 def video_feed(cam_id: str):
@@ -130,7 +135,7 @@ def video_feed(cam_id: str):
                      if ret: yield (b'--frame\r\nContent-Type: image/jpeg\r\n\r\n' + buf.tobytes() + b'\r\n')
                      time.sleep(0.5)
                      continue
-                if time.time() - last_seen.get(cam_id, 0) < 1.0:
+                if time.time() - last_seen.get(cam_id, 0) < 3.0:
                     if not is_logged:
                         send_to_gateway(cam_id, "CONNECTED")
                         verified_viewers.add(cam_id)
@@ -138,7 +143,8 @@ def video_feed(cam_id: str):
                     try:
                         ret, buf = cv2.imencode('.jpg', camera_streams[cam_id])
                         if ret: yield (b'--frame\r\nContent-Type: image/jpeg\r\n\r\n' + buf.tobytes() + b'\r\n')
-                    except: pass
+                    except Exception as e:
+                        print(f"❌ [video_feed 인코딩 오류] {cam_id}: {e}")
                 else:
                     if is_logged:
                         send_to_gateway(cam_id, "DISCONNECTED")
@@ -147,7 +153,8 @@ def video_feed(cam_id: str):
                     ret, buf = cv2.imencode('.jpg', offline_frame)
                     if ret: yield (b'--frame\r\nContent-Type: image/jpeg\r\n\r\n' + buf.tobytes() + b'\r\n')
                     time.sleep(0.5)
-        except: pass
+        except Exception as e:
+            print(f"❌ [video_feed 스트림 오류] {cam_id}: {e}")
         finally:
             active_viewers.discard(cam_id)
             verified_viewers.discard(cam_id)
@@ -162,6 +169,18 @@ async def update_mode(robot_id: str, mode_data: dict):
 
 @app.post("/stop_monitoring/{cam_id}")
 def stop_monitoring(cam_id: str):
+    return stop_monitoring_explicit(cam_id)
+
+@app.post("/monitoring/start/{cam_id}")
+def start_monitoring(cam_id: str):
+    monitoring_enabled.add(cam_id)
+    device_status[cam_id] = device_status.get(cam_id, "SAFE")
+    return {"status": "monitoring_enabled"}
+
+@app.post("/monitoring/stop/{cam_id}")
+def stop_monitoring_explicit(cam_id: str):
+    # 감시 비활성화: 탐지/알림 중단(스트리밍과 무관)
+    monitoring_enabled.discard(cam_id)
     active_viewers.discard(cam_id)
     verified_viewers.discard(cam_id)
     device_status[cam_id] = "SAFE"
