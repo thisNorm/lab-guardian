@@ -90,6 +90,7 @@ function App() {
   const [maximizedRobot, setMaximizedRobot] = useState<string | null>(null);
   const maximizedRobotRef = useRef<string | null>(null);
   const devicesRef = useRef<Device[]>([]);
+  const monitoringSetRef = useRef<Set<string>>(new Set());
 
   const [open, setOpen] = useState(false);
   const [targetType, setTargetType] = useState<'CCTV' | 'ROBOT'>('CCTV');
@@ -106,6 +107,26 @@ function App() {
 
   useEffect(() => { maximizedRobotRef.current = maximizedRobot; }, [maximizedRobot]);
   useEffect(() => { devicesRef.current = devices; }, [devices]);
+
+  useEffect(() => {
+    const nextIds = new Set(devices.map(d => d.id));
+
+    devices.forEach(dev => {
+      if (!monitoringSetRef.current.has(dev.id)) {
+        fetch(`${NETWORK_CONFIG.ALGO_API_URL}/monitoring/start/${dev.id}`, { method: 'POST' })
+          .then(() => { monitoringSetRef.current.add(dev.id); })
+          .catch(() => {});
+      }
+    });
+
+    monitoringSetRef.current.forEach(id => {
+      if (!nextIds.has(id)) {
+        fetch(`${NETWORK_CONFIG.ALGO_API_URL}/monitoring/stop/${id}`, { method: 'POST' })
+          .catch(() => {})
+          .finally(() => { monitoringSetRef.current.delete(id); });
+      }
+    });
+  }, [devices]);
 
   useEffect(() => {
     try {
