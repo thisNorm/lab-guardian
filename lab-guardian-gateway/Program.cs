@@ -76,11 +76,25 @@ app.MapGet("/api/logs/recent", (int? take, string? type) => {
     return Results.Json(new { count = items.Count, items });
 });
 var allSockets = new List<IWebSocketConnection>();
+var socketLock = new object();
 var websocketServer = new WebSocketServer("ws://0.0.0.0:8080");
 
 websocketServer.Start(socket => {
-    socket.OnOpen = () => allSockets.Add(socket);
-    socket.OnClose = () => allSockets.Remove(socket);
+    socket.OnOpen = () => {
+        lock (socketLock) {
+            allSockets.Add(socket);
+        }
+    };
+    socket.OnError = _ => {
+        lock (socketLock) {
+            allSockets.Remove(socket);
+        }
+    };
+    socket.OnClose = () => {
+        lock (socketLock) {
+            allSockets.Remove(socket);
+        }
+    };
 });
 
 // 🚀 [핵심 수정 1] Redis 연결 (서버 시작 시 1회만 연결)
@@ -290,8 +304,27 @@ while (!cts.IsCancellationRequested)
                         snapshot = imagePath
                     });
 
-                    foreach (var socket in allSockets.ToList()) {
-                        if (socket.IsAvailable) _ = socket.Send(jsonPayload);
+                    List<IWebSocketConnection> socketsSnapshot;
+                    lock (socketLock) {
+                        socketsSnapshot = allSockets.ToList();
+                    }
+                    foreach (var socket in socketsSnapshot) {
+                        try {
+                            if (socket.IsAvailable) _ = socket.Send(jsonPayload);
+                            else {
+                                lock (socketLock) {
+                                    allSockets.Remove(socket);
+                                }
+                            }
+                        } catch {
+                            lock (socketLock) {
+                                allSockets.Remove(socket);
+                            }
+                            try {
+                                socket.Close();
+                            } catch {
+                            }
+                        }
                     }
 
                 } catch (Exception ex) {
