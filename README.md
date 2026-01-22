@@ -129,6 +129,8 @@ cd lab-guardian-gateway
 # DB 스키마가 변경되었으므로 기존 .db 파일 삭제 후 실행 권장
 dotnet run
 ```
+Gateway HTTP API: http://{PC_IP}:8081 (health, logs, queues, dlq)
+
 
 ### 2️⃣ 알고리즘 서버 (AI Server)
 ```bash
@@ -159,6 +161,40 @@ python main_server.py
 ```
 
 ---
+
+
+## Runtime Checklist (2026-01-22)
+
+Required local services
+- Redis: 127.0.0.1:6379
+- Gateway (C#): WS 8080, TCP 8888, HTTP 8081
+- Algo (FastAPI): 3000
+- Backend (Nest): 8000
+- Web (Vite): 5173
+
+Algorithm .env (required)
+- File: lab-guardian-algorithm/.env
+- Required keys: TELEGRAM_TOKEN, TELEGRAM_CHAT_ID, PC_IP
+  - Example (replace with real token/chat id):
+    TELEGRAM_TOKEN=YOUR_TOKEN
+    TELEGRAM_CHAT_ID=YOUR_CHAT_ID
+    PC_IP=192.168.0.149
+
+Gateway HTTP API (Minimal)
+- GET http://localhost:8081/health
+- GET http://localhost:8081/api/logs/recent?take=50&type=all|cctv|robot
+- GET http://localhost:8081/api/queues
+- GET http://localhost:8081/api/dlq
+- POST http://localhost:8081/api/dlq/replay
+
+Backend DLQ API (Nest)
+- GET http://localhost:8000/admin/dlq
+- POST http://localhost:8000/admin/dlq/replay
+
+Quick smoke tests
+- curl http://localhost:8081/health
+- curl "http://localhost:8081/api/logs/recent?take=10&type=all"
+- curl http://localhost:8000/admin/dlq
 
 ## 🛠️ Troubleshooting (해결 사례)
 
@@ -191,6 +227,7 @@ python main_server.py
     + **해결:** C# 게이트웨이와 Python 서버 간의 DB 접근 충돌을 방지하기 위해, 게이트웨이(C#)가 DB 쓰기 권한을 전담하고 Python은 TCP 메시지만 전송하는 **단방향 아키텍처**를 수립했습니다.
 
 DLQ 확인 및 수동 복구: GET /admin/dlq, POST /admin/dlq/replay
+???? ??? ?? ??: GET http://{PC_IP}:8081/api/logs/recent (??: /api/queues, /api/dlq)
 
 ---
 

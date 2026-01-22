@@ -8,6 +8,11 @@ using lab_guardian_gateway.Services;
 using lab_guardian_gateway.Workers;
 using Fleck;
 using StackExchange.Redis;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 
 // 1. DB 설정 (초기화용)
 string dbName = "LogDatabase.db";
@@ -23,6 +28,53 @@ try {
 }
 
 // 2. 서버 구동 설정
+var cts = new CancellationTokenSource();
+
+var builder = WebApplication.CreateBuilder(args);
+builder.WebHost.UseUrls("http://0.0.0.0:8081");
+builder.Services.AddCors(options => {
+    options.AddDefaultPolicy(policy => policy
+        .AllowAnyHeader()
+        .AllowAnyMethod()
+        .AllowAnyOrigin());
+});
+
+var app = builder.Build();
+app.UseCors();
+
+app.MapGet("/health", () => Results.Json(new {
+    status = "ok",
+    time = DateTime.UtcNow.ToString("o"),
+}));
+
+app.MapGet("/api/logs/recent", (int? take, string? type) => {
+    int takeCount = Math.Min(Math.Max(take ?? 50, 1), 200);
+    string logType = string.IsNullOrWhiteSpace(type) ? "all" : type.Trim().ToLowerInvariant();
+
+    using var db = new LabDbContext();
+    var query = db.EventLogs.AsQueryable();
+
+    if (logType == "cctv") {
+        query = query.Where(log => log.CctvLog != null);
+    } else if (logType == "robot") {
+        query = query.Where(log => log.RobotLog != null);
+    }
+
+    var items = query
+        .OrderByDescending(log => log.CreatedAt)
+        .Take(takeCount)
+        .Select(log => new {
+            id = log.Id,
+            camId = log.CamId,
+            createdAt = log.CreatedAt,
+            cctvLog = log.CctvLog,
+            robotLog = log.RobotLog,
+            snapshotPath = log.SnapshotPath,
+        })
+        .ToList();
+
+    return Results.Json(new { count = items.Count, items });
+});
 var allSockets = new List<IWebSocketConnection>();
 var websocketServer = new WebSocketServer("ws://0.0.0.0:8080");
 
@@ -38,20 +90,111 @@ var redisDb = redisMux.GetDatabase();
 var queueMetrics = new RedisQueueMetrics(redisDb);
 var backlogCache = new RedisQueueBacklogCache(redisDb);
 var workerCts = new CancellationTokenSource();
-_ = Task.Run(() => RunWithRestartAsync("Metrics", () => queueMetrics.RunLogLoopAsync(workerCts.Token), workerCts.Token));
-_ = Task.Run(() => RunWithRestartAsync("Worker", () => new RedisEventWorker(redisDb, queueMetrics).RunAsync(workerCts.Token), workerCts.Token));
-_ = Task.Run(() => RunWithRestartAsync("BacklogCache", () => backlogCache.RunAsync(workerCts.Token), workerCts.Token));
+_ = Task.Run(async () => {
+    try {
+        await RunWithRestartAsync("Metrics", () => queueMetrics.RunLogLoopAsync(workerCts.Token), workerCts.Token);
+    } catch (Exception ex) {
+        Console.WriteLine($"[Metrics task failed] {ex.Message}");
+    }
+});
+_ = Task.Run(async () => {
+    try {
+        await RunWithRestartAsync("Worker", () => new RedisEventWorker(redisDb, queueMetrics).RunAsync(workerCts.Token), workerCts.Token);
+    } catch (Exception ex) {
+        Console.WriteLine($"[Worker task failed] {ex.Message}");
+    }
+});
+_ = Task.Run(async () => {
+    try {
+        await RunWithRestartAsync("BacklogCache", () => backlogCache.RunAsync(workerCts.Token), workerCts.Token);
+    } catch (Exception ex) {
+        Console.WriteLine($"[BacklogCache task failed] {ex.Message}");
+    }
+});
 
 var listener = new TcpListener(IPAddress.Any, 8888);
 listener.Start();
+
+Console.CancelKeyPress += (_, e) => {
+    e.Cancel = true;
+    cts.Cancel();
+    try {
+        listener.Stop();
+    } catch {
+        // ignore shutdown errors
+    }
+};
+
+app.MapGet("/api/queues", async () => {
+    try {
+        var danger = await redisDb.ListLengthAsync(RedisQueueConfig.DangerQueue);
+        var eventLen = await redisDb.ListLengthAsync(RedisQueueConfig.EventQueue);
+        var dlq = await redisDb.ListLengthAsync(RedisQueueConfig.DlqQueue);
+        return Results.Json(new { danger, @event = eventLen, dlq });
+    } catch {
+        return Results.Problem("Redis error", statusCode: 500);
+    }
+});
+
+app.MapGet("/api/dlq", async (int? take) => {
+    int takeCount = Math.Min(Math.Max(take ?? 50, 1), 500);
+    try {
+        var rawItems = await redisDb.ListRangeAsync(RedisQueueConfig.DlqQueue, -takeCount, -1);
+        var items = rawItems.Select(item => {
+            var raw = item.ToString();
+            try {
+                var parsed = JsonSerializer.Deserialize<object>(raw);
+                return new { parsed } as object;
+            } catch {
+                return new { raw } as object;
+            }
+        }).ToList();
+        return Results.Json(new { count = items.Count, items });
+    } catch {
+        return Results.Problem("Redis error", statusCode: 500);
+    }
+});
+
+app.MapPost("/api/dlq/replay", async (int? take) => {
+    int takeCount = Math.Min(Math.Max(take ?? 50, 1), 500);
+    int replayed = 0;
+    int failed = 0;
+    Console.WriteLine("[DLQ] manual replay initiated");
+
+    try {
+        for (int i = 0; i < takeCount; i++) {
+            var item = await redisDb.ListRightPopAsync(RedisQueueConfig.DlqQueue);
+            if (item.IsNullOrEmpty) break;
+            try {
+                await redisDb.ListRightPushAsync(RedisQueueConfig.EventQueue, item);
+                replayed++;
+            } catch {
+                failed++;
+            }
+        }
+    } catch {
+        return Results.Problem("Redis error", statusCode: 500);
+    }
+
+    return Results.Json(new { replayed, failed });
+});
+
+await app.StartAsync();
 
 Console.WriteLine("--------------------------------------------------");
 Console.WriteLine("🚀 게이트웨이 통합 관제 시작 (Redis Buffered Ver)");
 Console.WriteLine("--------------------------------------------------");
 
-while (true)
+while (!cts.IsCancellationRequested)
 {
-    var client = await listener.AcceptTcpClientAsync();
+    TcpClient client;
+    try {
+        client = await listener.AcceptTcpClientAsync();
+    } catch (ObjectDisposedException) when (cts.IsCancellationRequested) {
+        break;
+    } catch (SocketException) when (cts.IsCancellationRequested) {
+        break;
+    }
     
     _ = Task.Run(async () => {
         try {
@@ -164,6 +307,8 @@ while (true)
         }
     });
 }
+
+await app.StopAsync();
 
 static async Task RunWithRestartAsync(string name, Func<Task> runAsync, CancellationToken ct) {
     while (!ct.IsCancellationRequested) {

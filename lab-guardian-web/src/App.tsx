@@ -36,15 +36,60 @@ const darkTheme = createTheme({
 type DeviceStatus = 'IDLE' | 'PATROL' | 'DANGER';
 interface Device { id: string; name: string; status: DeviceStatus; type: 'CCTV' | 'ROBOT'; }
 
+
+const LS_KEYS = {
+  devices: 'lab_guardian_devices',
+  logsCctv: 'lab_guardian_logs_cctv',
+  logsRobot: 'lab_guardian_logs_robot',
+  uiState: 'lab_guardian_ui_state',
+};
+
 function App() {
-  const [devices, setDevices] = useState<Device[]>([]);
+  const [devices, setDevices] = useState<Device[]>(() => {
+    try {
+      const raw = localStorage.getItem(LS_KEYS.devices);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  });
   
-  const [cctvDisplayLogs, setCctvDisplayLogs] = useState<string[]>([]);
-  const [robotDisplayLogs, setRobotDisplayLogs] = useState<string[]>([]);
-  const [logHeight, setLogHeight] = useState(200);
+  const [cctvDisplayLogs, setCctvDisplayLogs] = useState<string[]>(() => {
+    try {
+      const raw = localStorage.getItem(LS_KEYS.logsCctv);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  });
+  const [robotDisplayLogs, setRobotDisplayLogs] = useState<string[]>(() => {
+    try {
+      const raw = localStorage.getItem(LS_KEYS.logsRobot);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  });
+  const [logHeight, setLogHeight] = useState(() => {
+    try {
+      const raw = localStorage.getItem(LS_KEYS.uiState);
+      if (!raw) return 200;
+      const parsed = JSON.parse(raw);
+      return typeof parsed?.logHeight === 'number' ? parsed.logHeight : 200;
+    } catch {
+      return 200;
+    }
+  });
   const [maximizedCctv, setMaximizedCctv] = useState<string | null>(null);
   const [maximizedRobot, setMaximizedRobot] = useState<string | null>(null);
   const maximizedRobotRef = useRef<string | null>(null);
+  const devicesRef = useRef<Device[]>([]);
 
   const [open, setOpen] = useState(false);
   const [targetType, setTargetType] = useState<'CCTV' | 'ROBOT'>('CCTV');
@@ -56,8 +101,40 @@ function App() {
   const robotSocketRef = useRef<Socket | null>(null);
   const isResizing = useRef(false);
   const alertTimers = useRef<{ [key: string]: number }>({});
+  const robotConnectErrorCount = useRef(0);
+  const robotDisconnectedWarned = useRef(false);
 
   useEffect(() => { maximizedRobotRef.current = maximizedRobot; }, [maximizedRobot]);
+  useEffect(() => { devicesRef.current = devices; }, [devices]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(LS_KEYS.devices, JSON.stringify(devices));
+    } catch {}
+  }, [devices]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(LS_KEYS.logsCctv, JSON.stringify(cctvDisplayLogs.slice(0, 50)));
+    } catch {}
+  }, [cctvDisplayLogs]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(LS_KEYS.logsRobot, JSON.stringify(robotDisplayLogs.slice(0, 50)));
+    } catch {}
+  }, [robotDisplayLogs]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(LS_KEYS.uiState, JSON.stringify({
+        logHeight,
+        maximizedCctv,
+        maximizedRobot,
+      }));
+    } catch {}
+  }, [logHeight, maximizedCctv, maximizedRobot]);
+
 
   const startResizing = useCallback(() => { isResizing.current = true; document.body.style.cursor = 'row-resize'; }, []);
   const stopResizing = useCallback(() => { isResizing.current = false; document.body.style.cursor = 'default'; }, []);
@@ -92,22 +169,16 @@ function App() {
         const normalizedId = deviceId.toUpperCase();
 
         // 2. 상태 업데이트 (테두리 색상 변경용)
-        setDevices(prev => {
-           // 이미 등록된 장치인지 확인
-           const exists = prev.find(d => d.id.toUpperCase() === normalizedId);
-           if (exists) {
-             return prev.map(d => {
-               if (d.id.toUpperCase() === normalizedId && d.status !== status) {
-                 return { ...d, status: status as DeviceStatus };
-               }
-               return d;
-             });
-           } else {
-             // 없으면 새로 추가 (자동 등록 기능)
-             const type = (normalizedId.includes('CCTV') || normalizedId.includes('WEBCAM')) ? 'CCTV' : 'ROBOT';
-             return [...prev, { id: deviceId, name: deviceId, status: status as DeviceStatus, type }];
-           }
-        });
+        const isKnownDevice = devicesRef.current.some(d => d.id.toUpperCase() === normalizedId);
+        if (!isKnownDevice) return;
+
+        // 2. ?? ???? (??? ?? ???)
+        setDevices(prev => prev.map(d => {
+          if (d.id.toUpperCase() === normalizedId && d.status !== status) {
+            return { ...d, status: status as DeviceStatus };
+          }
+          return d;
+        }));
 
         // 3. 로그 메시지 구성
         let emoji = 'ℹ️';
@@ -148,15 +219,58 @@ function App() {
     return () => { ws.close(); };
   }, []);
 
-  useEffect(() => {
+  const ensureRobotSocketConnected = useCallback(() => {
+    if (robotSocketRef.current && robotSocketRef.current.connected) return;
+    if (robotSocketRef.current && !robotSocketRef.current.connected) {
+      robotSocketRef.current.disconnect();
+      robotSocketRef.current = null;
+    }
+
     const robotUrl = `http://${NETWORK_CONFIG.ROBOT_IP}:5001`;
-    robotSocketRef.current = io(robotUrl, { 
+    const socket = io(robotUrl, {
       transports: ['websocket'],
-      reconnectionAttempts: 5
+      reconnection: true,
+      reconnectionAttempts: 3,
+      reconnectionDelay: 800,
+      timeout: 2500,
     });
 
+    robotConnectErrorCount.current = 0;
+    robotDisconnectedWarned.current = false;
+
+    socket.on('connect', () => {
+      console.log('Robot socket connected');
+      robotConnectErrorCount.current = 0;
+      robotDisconnectedWarned.current = false;
+    });
+
+    socket.on('connect_error', () => {
+      robotConnectErrorCount.current += 1;
+      console.warn(`Robot socket connect error (attempt ${robotConnectErrorCount.current})`);
+    });
+
+    socket.on('disconnect', () => {
+      if (!robotDisconnectedWarned.current) {
+        console.warn('Robot socket disconnected');
+        robotDisconnectedWarned.current = true;
+      }
+    });
+
+    robotSocketRef.current = socket;
+  }, []);
+
+  useEffect(() => {
+    if (maximizedRobot) {
+      ensureRobotSocketConnected();
+    } else if (robotSocketRef.current) {
+      robotSocketRef.current.disconnect();
+      robotSocketRef.current = null;
+    }
+  }, [maximizedRobot, ensureRobotSocketConnected]);
+
+  useEffect(() => {
     const handleRemoteControl = (e: KeyboardEvent, type: 'down' | 'up') => {
-      if (!maximizedRobotRef.current || !robotSocketRef.current) return;
+      if (!maximizedRobotRef.current || !robotSocketRef.current || !robotSocketRef.current.connected) return;
       const key = e.key.toLowerCase();
       if (['w', 'a', 's', 'd'].includes(key) || key.includes('arrow')) {
         e.preventDefault();
@@ -177,7 +291,6 @@ function App() {
       window.removeEventListener('mouseup', stopResizing); 
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
-      robotSocketRef.current?.disconnect();
     };
   }, [resizeLogs, stopResizing]);
 
@@ -315,7 +428,10 @@ function App() {
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
               <Typography variant="caption" color="error" sx={{ fontWeight: 'bold' }}>📡 SECURITY EVENTS (CCTV)</Typography>
               <Tooltip title="Clear CCTV Logs">
-                <IconButton size="small" onClick={() => setCctvDisplayLogs([])} sx={{ color: '#ff5252', p: 0.5 }}>
+                <IconButton size="small" onClick={() => {
+                  setCctvDisplayLogs([]);
+                  try { localStorage.removeItem(LS_KEYS.logsCctv); } catch {}
+                }} sx={{ color: '#ff5252', p: 0.5 }}>
                   <DeleteSweepIcon sx={{ fontSize: 18 }} />
                 </IconButton>
               </Tooltip>
@@ -334,7 +450,10 @@ function App() {
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
               <Typography variant="caption" color="primary" sx={{ fontWeight: 'bold' }}>🤖 SYSTEM LOGS (ROBOT)</Typography>
               <Tooltip title="Clear Robot Logs">
-                <IconButton size="small" onClick={() => setRobotDisplayLogs([])} sx={{ color: '#64b5f6', p: 0.5 }}>
+                <IconButton size="small" onClick={() => {
+                  setRobotDisplayLogs([]);
+                  try { localStorage.removeItem(LS_KEYS.logsRobot); } catch {}
+                }} sx={{ color: '#64b5f6', p: 0.5 }}>
                   <DeleteSweepIcon sx={{ fontSize: 18 }} />
                 </IconButton>
               </Tooltip>
