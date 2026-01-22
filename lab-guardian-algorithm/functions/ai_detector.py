@@ -2,6 +2,7 @@
 from ultralytics import YOLO
 import cv2
 import numpy as np
+import torch
 
 # 🔴 [수정] main.py 실행 위치 기준으로 경로 변경
 # 같은 폴더(functions) 안에 있더라도, 실행은 루트에서 하므로 전체 경로를 적어줍니다.
@@ -11,6 +12,9 @@ class AIDetector:
     def __init__(self, model_name='yolov8n.pt'):
         print(f"🧠 [AI] 모델({model_name}) 로딩 중...")
         self.model = YOLO(model_name)
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.model.to(self.device)
+        print(f"[AI] device: {self.device}")
         # 카메라별 트래커 관리
         self.trackers = {}
         print("✅ [AI] 모델 및 트래커 준비 완료!")
