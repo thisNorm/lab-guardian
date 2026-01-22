@@ -50,6 +50,7 @@ pnpm-lock.yaml
 # [Temporary & Logs]
 *.log
 **/logs/
+run-logs/
 pids
 *.pid
 *.seed
