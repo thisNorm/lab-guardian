@@ -1,4 +1,6 @@
 import time, socket, cv2, numpy as np
+import torch
+import psutil
 import uvicorn, os, asyncio, sys
 from functools import wraps
 from fastapi import FastAPI, UploadFile, File
@@ -67,6 +69,19 @@ def send_to_gateway(cam_id, status_msg, image_path=None):
             print(f"📡 [전송] {full_msg}") 
     except Exception as e:
         print(f"❌ [전송 실패] {e}")
+
+@app.get("/system/runtime")
+def system_runtime():
+    # 관측용: 추론 디바이스 및 CPU 사용률 노출
+    is_cuda = torch.cuda.is_available()
+    device = "cuda" if is_cuda else "cpu"
+    gpu_name = torch.cuda.get_device_name(0) if is_cuda else None
+    cpu_usage = psutil.cpu_percent(interval=0.1)
+    return {
+        "device": device,
+        "gpu_name": gpu_name,
+        "cpu_usage_percent": cpu_usage,
+    }
 
 @app.post("/upload_frame/{robot_id}")
 async def upload_frame(robot_id: str, file: UploadFile = File(...)):

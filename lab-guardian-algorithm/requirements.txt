@@ -6,3 +6,4 @@ requests
 python-multipart
 ultralytics
 pyrealsense2
+psutil
