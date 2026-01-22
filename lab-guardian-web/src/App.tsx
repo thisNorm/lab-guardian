@@ -5,7 +5,7 @@ import {
   AppBar, Toolbar, Typography, Paper, Button, Card, Stack, Box,
   List, ListItem, ListItemText, CssBaseline, keyframes,
   IconButton, TextField, Dialog, DialogTitle, DialogContent, DialogActions,
-  Tooltip
+  Tooltip, MenuItem
 } from '@mui/material';
 import Grid from '@mui/material/Grid';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
@@ -95,6 +95,15 @@ function App() {
   const [open, setOpen] = useState(false);
   const [targetType, setTargetType] = useState<'CCTV' | 'ROBOT'>('CCTV');
   const [newName, setNewName] = useState('');
+  const [newIp, setNewIp] = useState('');
+  const [newUsername, setNewUsername] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [newStream, setNewStream] = useState<'sub' | 'main'>('sub');
+  const [newRtspPath, setNewRtspPath] = useState('');
+  const [newRtspPort, setNewRtspPort] = useState('554');
+  const [cctvMode, setCctvMode] = useState<'rtsp' | 'usb'>('rtsp');
+  const [registerError, setRegisterError] = useState('');
+  const [isRegistering, setIsRegistering] = useState(false);
   
   const [videoErrors, setVideoErrors] = useState<Record<string, boolean>>({});
   
@@ -315,10 +324,91 @@ function App() {
     };
   }, [resizeLogs, stopResizing]);
 
-  const handleSave = () => {
-    const isCctv = targetType === 'CCTV' || newName.toLowerCase().includes('cctv');
-    setDevices(prev => [...prev, { id: newName, name: newName, status: 'IDLE', type: isCctv ? 'CCTV' : 'ROBOT' }]);
-    setOpen(false); setNewName('');
+  const resetDeviceForm = () => {
+    setNewName('');
+    setNewIp('');
+    setNewUsername('');
+    setNewPassword('');
+    setNewStream('sub');
+    setNewRtspPath('');
+    setNewRtspPort('554');
+    setCctvMode('rtsp');
+    setRegisterError('');
+    setIsRegistering(false);
+  };
+
+  const handleSave = async () => {
+    const camId = newName.trim();
+    if (!camId) return;
+
+    if (targetType === 'CCTV') {
+      if (cctvMode === 'rtsp' && !newIp.trim()) {
+        setRegisterError('IP Address가 필요합니다.');
+        return;
+      }
+      try {
+        setRegisterError('');
+        setIsRegistering(true);
+        if (cctvMode === 'usb') {
+          setDevices(prev => [...prev, { id: camId, name: camId, status: 'IDLE', type: 'CCTV' }]);
+          setOpen(false);
+          setNewName('');
+          setNewIp('');
+          setNewUsername('');
+          setNewPassword('');
+          setNewStream('sub');
+          setCctvMode('rtsp');
+          setRegisterError('');
+          setIsRegistering(false);
+          return;
+        }
+        const res = await fetch(`${NETWORK_CONFIG.ALGO_API_URL}/cameras/register`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            cam_id: camId,
+            ip: newIp.trim(),
+            username: newUsername.trim(),
+            password: newPassword,
+            stream: newStream,
+            path: newRtspPath.trim() || undefined,
+            port: newRtspPort.trim() || undefined,
+          }),
+        });
+
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || data.status !== 'connected') {
+          const msg = data?.detail || data?.message || 'RTSP connection failed';
+          setRegisterError(msg);
+          setNewPassword('');
+          setIsRegistering(false);
+          return;
+        }
+
+        setDevices(prev => [...prev, { id: camId, name: camId, status: 'IDLE', type: 'CCTV' }]);
+        setOpen(false);
+        setNewName('');
+        setNewIp('');
+        setNewUsername('');
+        setNewPassword('');
+        setNewStream('sub');
+        setNewRtspPath('');
+        setNewRtspPort('554');
+        setCctvMode('rtsp');
+        setRegisterError('');
+        setIsRegistering(false);
+        return;
+      } catch (e) {
+        setRegisterError('RTSP connection failed');
+        setNewPassword('');
+        setIsRegistering(false);
+        return;
+      }
+    }
+
+    setDevices(prev => [...prev, { id: camId, name: camId, status: 'IDLE', type: 'ROBOT' }]);
+    setOpen(false);
+    resetDeviceForm();
   };
 
   const DeviceCard = ({ dev, isMaximized, onMaximize }: { dev: Device, isMaximized: boolean, onMaximize: () => void }) => (
@@ -399,7 +489,7 @@ function App() {
             {!maximizedCctv && (
               <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ p: 1, bgcolor: '#0c141d', borderBottom: '1px solid #333' }}>
                 <Typography variant="overline" color="error" sx={{ fontWeight: 'bold' }}> • Static CCTV</Typography>
-                <Button size="small" startIcon={<AddIcon />} onClick={() => { setTargetType('CCTV'); setOpen(true); }}>Add</Button>
+                <Button size="small" startIcon={<AddIcon />} onClick={() => { setTargetType('CCTV'); resetDeviceForm(); setOpen(true); }}>Add</Button>
               </Stack>
             )}
             <Box sx={{ flexGrow: 1, p: maximizedCctv ? 0 : 1 }}>
@@ -420,7 +510,7 @@ function App() {
             {!maximizedRobot && (
               <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ p: 1, bgcolor: '#0c141d', borderBottom: '1px solid #333' }}>
                 <Typography variant="overline" color="primary" sx={{ fontWeight: 'bold' }}> • Mobile Robot</Typography>
-                <Button size="small" color="secondary" startIcon={<AddIcon />} onClick={() => { setTargetType('ROBOT'); setOpen(true); }}>Add</Button>
+                <Button size="small" color="secondary" startIcon={<AddIcon />} onClick={() => { setTargetType('ROBOT'); resetDeviceForm(); setOpen(true); }}>Add</Button>
               </Stack>
             )}
             <Box sx={{ flexGrow: 1, p: maximizedRobot ? 0 : 1 }}>
@@ -490,14 +580,123 @@ function App() {
         </Box>
       </Box>
 
-      <Dialog open={open} onClose={() => setOpen(false)}>
+      <Dialog open={open} onClose={() => { setOpen(false); resetDeviceForm(); }}>
         <DialogTitle sx={{ fontSize: '1rem' }}>새 장치 등록</DialogTitle>
         <DialogContent>
-          <TextField autoFocus fullWidth variant="filled" label="Device ID" value={newName} onChange={(e) => setNewName(e.target.value)} sx={{ mt: 1 }} />
+          <TextField
+            select
+            fullWidth
+            variant="filled"
+            label="Device Type"
+            value={targetType}
+            onChange={(e) => setTargetType(e.target.value as 'CCTV' | 'ROBOT')}
+            sx={{ mt: 1 }}
+          >
+            <MenuItem value="CCTV">CCTV</MenuItem>
+            <MenuItem value="ROBOT">ROBOT</MenuItem>
+          </TextField>
+          <TextField
+            autoFocus
+            fullWidth
+            variant="filled"
+            label="Device ID"
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            sx={{ mt: 1 }}
+          />
+          {targetType === 'CCTV' && (
+            <>
+              <TextField
+                select
+                fullWidth
+                variant="filled"
+                label="CCTV Mode"
+                value={cctvMode}
+                onChange={(e) => setCctvMode(e.target.value as 'rtsp' | 'usb')}
+                sx={{ mt: 1 }}
+              >
+                <MenuItem value="rtsp">RTSP</MenuItem>
+                <MenuItem value="usb">USB/Local</MenuItem>
+              </TextField>
+              {cctvMode === 'rtsp' && (
+                <>
+              <TextField
+                fullWidth
+                variant="filled"
+                label="IP Address"
+                value={newIp}
+                onChange={(e) => setNewIp(e.target.value)}
+                sx={{ mt: 1 }}
+              />
+              <TextField
+                fullWidth
+                variant="filled"
+                label="RTSP Username"
+                value={newUsername}
+                onChange={(e) => setNewUsername(e.target.value)}
+                sx={{ mt: 1 }}
+              />
+              <TextField
+                fullWidth
+                variant="filled"
+                label="RTSP Password"
+                type="password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                sx={{ mt: 1 }}
+              />
+              <TextField
+                select
+                fullWidth
+                variant="filled"
+                label="Stream"
+                value={newStream}
+                onChange={(e) => setNewStream(e.target.value as 'sub' | 'main')}
+                sx={{ mt: 1 }}
+              >
+                <MenuItem value="sub">sub</MenuItem>
+                <MenuItem value="main">main</MenuItem>
+              </TextField>
+              <TextField
+                fullWidth
+                variant="filled"
+                label="RTSP Path (optional)"
+                placeholder="/stream1"
+                value={newRtspPath}
+                onChange={(e) => setNewRtspPath(e.target.value)}
+                sx={{ mt: 1 }}
+              />
+              <TextField
+                fullWidth
+                variant="filled"
+                label="RTSP Port"
+                value={newRtspPort}
+                onChange={(e) => setNewRtspPort(e.target.value)}
+                sx={{ mt: 1 }}
+              />
+                </>
+              )}
+            </>
+          )}
+          {registerError && (
+            <Typography variant="caption" color="error" sx={{ display: 'block', mt: 1 }}>
+              {registerError}
+            </Typography>
+          )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setOpen(false)} color="inherit">취소</Button>
-          <Button onClick={handleSave} variant="contained" color="primary">등록</Button>
+          <Button
+            onClick={() => {
+              setOpen(false);
+              resetDeviceForm();
+            }}
+            color="inherit"
+          >
+            취소
+          </Button>
+          <Button onClick={handleSave} variant="contained" color="primary" disabled={isRegistering}>
+            등록
+          </Button>
         </DialogActions>
       </Dialog>
     </ThemeProvider>
