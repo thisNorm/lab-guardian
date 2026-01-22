@@ -180,6 +180,11 @@ Algorithm .env (required)
     TELEGRAM_CHAT_ID=YOUR_CHAT_ID
     PC_IP=192.168.0.149
 
+Algorithm performance tuning (optional)
+- STREAM_FPS (default 10): MJPEG 전송 FPS 제한
+- DETECT_FPS (default 3): YOLO 추론 FPS 제한
+- STREAM_WIDTH / STREAM_HEIGHT (default 640x360): 전송 프레임 해상도
+
 Gateway HTTP API (Minimal)
 - GET http://localhost:8081/health
 - GET http://localhost:8081/api/logs/recent?take=50&type=all|cctv|robot
@@ -228,6 +233,19 @@ Quick smoke tests
 
 DLQ 확인 및 수동 복구: GET /admin/dlq, POST /admin/dlq/replay
 ???? ??? ?? ??: GET http://{PC_IP}:8081/api/logs/recent (??: /api/queues, /api/dlq)
+
+### 4. Performance & CPU (??/CPU)
++ **??? 2? ???? CPU 30~45% ??**
+    + **??:** RTSP ??? + MJPEG ???? CPU?? ???. YOLO? GPU? ???? I/O? CPU? ??.
+    + **??:** ?? ???? ?? (???)
+        1) `STREAM_FPS` ??? (10 ? 5)
+        2) `STREAM_WIDTH/HEIGHT` ??? (640x360 ? 480x270)
+        3) `DETECT_FPS` ??? (3 ? 2)
+    + **?? ?(2? ??):**
+        - STREAM_FPS=8
+        - DETECT_FPS=2
+        - STREAM_WIDTH=640
+        - STREAM_HEIGHT=360
 
 ---
 
