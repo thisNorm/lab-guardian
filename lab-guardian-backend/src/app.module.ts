@@ -6,9 +6,12 @@ import { CctvService } from './cctv/cctv.service';
 import { RobotController } from './robot/robot.controller';
 import { MonitoringGateway } from './gateway/monitoring.gateway';
 import { PrismaService } from './prisma.service';
+import { AdminModule } from './admin/admin.module';
 
 @Module({
-  imports: [],
+  imports: [
+    AdminModule,
+  ],
   controllers: [
     AppController, 
     CctvController, 
