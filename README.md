@@ -190,6 +190,8 @@ python main_server.py
 + **DB 파일 잠금(Locking) 방지**
     + **해결:** C# 게이트웨이와 Python 서버 간의 DB 접근 충돌을 방지하기 위해, 게이트웨이(C#)가 DB 쓰기 권한을 전담하고 Python은 TCP 메시지만 전송하는 **단방향 아키텍처**를 수립했습니다.
 
+DLQ 확인 및 수동 복구: GET /admin/dlq, POST /admin/dlq/replay
+
 ---
 
 <div align="center"> <b>This project was designed and developed entirely by GyuBeom Hwang.</b>
