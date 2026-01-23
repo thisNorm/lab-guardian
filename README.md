@@ -129,7 +129,7 @@ cd lab-guardian-gateway
 # DB 스키마가 변경되었으므로 기존 .db 파일 삭제 후 실행 권장
 dotnet run
 ```
-Gateway HTTP API: http://{PC_IP}:8081 (health, logs, queues, dlq)
+`Gateway HTTP API: http://{PC_IP}:8081 (health, logs, queues, dlq)`
 
 
 ### 2️⃣ 알고리즘 서버 (AI Server)
@@ -232,29 +232,29 @@ Quick smoke tests
     + **해결:** C# 게이트웨이와 Python 서버 간의 DB 접근 충돌을 방지하기 위해, 게이트웨이(C#)가 DB 쓰기 권한을 전담하고 Python은 TCP 메시지만 전송하는 **단방향 아키텍처**를 수립했습니다.
 
 DLQ 확인 및 수동 복구: GET /admin/dlq, POST /admin/dlq/replay
-???? ??? ?? ??: GET http://{PC_IP}:8081/api/logs/recent (??: /api/queues, /api/dlq)
+게이트웨이 로그 목록: GET http://{PC_IP}:8081/api/logs/recent (옵션: /api/queues, /api/dlq)
 
-### 4. Performance & CPU (??/CPU)
-+ **??? 2? ???? CPU 30~45% ??**
-    + **??:** RTSP ??? + MJPEG ???? CPU?? ???. YOLO? GPU? ???? I/O? CPU? ??.
-    + **??:** ?? ???? ?? (???)
-        1) `STREAM_FPS` ??? (10 ? 5)
-        2) `STREAM_WIDTH/HEIGHT` ??? (640x360 ? 480x270)
-        3) `DETECT_FPS` ??? (3 ? 2)
-    + **?? ?(2? ??):**
-        - STREAM_FPS=8
-        - DETECT_FPS=2
-        - STREAM_WIDTH=640
-        - STREAM_HEIGHT=360
-    
-+ **?? ??? ?? ????(?? ??)**
-    + **??:** ??? ???? 720p? ?? ???, ?? ?? ??? ??. 
-    + **??? API:**
-        - POST `/streams/config/{cam_id}` (width/height/fps/quality/label)
-        - GET `/streams/config/{cam_id}` (?? ??)
-        - GET `/streams/configs` (?? ?? ??)
-    + **?? ?? ??(??):** CPU/??/GPU ?? ?? ?? 360p? ???? (?? ??), ?? ??? 1080p? ????.
-    + **???(????):** ?? ?? ??? ?? 1080p? ??? ???????.
+### 4. Performance & CPU (성능/CPU)
+- **카메라 2대 이상에서 CPU 30~45% 상승**
+  - **원인:** RTSP 디코딩 + MJPEG 인코딩이 CPU에서 수행됨. YOLO는 GPU로 가더라도 I/O는 CPU에 남음.
+  - **해결:** 아래 순서대로 적용 (점진적)
+    1) `STREAM_FPS` 낮추기 (10 → 5)
+    2) `STREAM_WIDTH/HEIGHT` 낮추기 (640x360 → 480x270)
+    3) `DETECT_FPS` 낮추기 (3 → 2)
+  - **권장 값(2대 기준):**
+    - STREAM_FPS=8
+    - DETECT_FPS=2
+    - STREAM_WIDTH=640
+    - STREAM_HEIGHT=360
+
+- **화질 자동 조정(부하 기반)**
+  - **기본:** 장치 추가 시 720p로 시작
+  - **제어 API:**
+    - POST `/streams/config/{cam_id}` (width/height/fps/quality/label)
+    - GET `/streams/config/{cam_id}` (장치별 설정)
+    - GET `/streams/configs` (전체 설정 목록)
+  - **자동 조정 규칙(요약):** CPU/메모리/GPU 부하가 높으면 360p로 하향, 여유가 생기면 1080p로 상향.
+  - **경보 시 고화질:** 침입 감지 순간에는 1080p로 일시 상향 후 원래 설정으로 복귀.
 
 ---
 
