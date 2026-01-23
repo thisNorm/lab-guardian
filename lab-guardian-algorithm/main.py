@@ -3,6 +3,7 @@ import logging
 import torch
 import psutil
 import uvicorn, os, asyncio, sys
+import subprocess
 from functools import wraps
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, UploadFile, File, HTTPException, Request
@@ -42,6 +43,22 @@ STREAM_HEIGHT = int(os.getenv("STREAM_HEIGHT", "720"))
 STREAM_SIZE = (STREAM_WIDTH, STREAM_HEIGHT)
 
 JPEG_QUALITY = int(os.getenv("JPEG_QUALITY", "85"))
+STALE_FRAME_SEC = float(os.getenv("STALE_FRAME_SEC", "2.0"))
+
+QUALITY_PRESETS = [
+    {"label": "1080p", "width": 1920, "height": 1080, "fps": 15, "quality": 90},
+    {"label": "720p", "width": 1280, "height": 720, "fps": 12, "quality": 85},
+    {"label": "480p", "width": 854, "height": 480, "fps": 10, "quality": 75},
+    {"label": "360p", "width": 640, "height": 360, "fps": 8, "quality": 70},
+]
+
+DEFAULT_STREAM_CONFIG = {
+    "fps": STREAM_FPS,
+    "width": STREAM_WIDTH,
+    "height": STREAM_HEIGHT,
+    "quality": JPEG_QUALITY,
+    "label": "720p",
+}
 
 # RTSP 지연 최소화 옵션 (FFmpeg)
 OPENCV_FFMPEG_CAPTURE_OPTIONS = os.getenv(
@@ -64,6 +81,7 @@ async def lifespan(app: FastAPI):
             return
         loop.default_exception_handler(context)
     loop.set_exception_handler(_handler)
+    asyncio.create_task(_auto_quality_loop())
     yield
 
 app = FastAPI(lifespan=lifespan)
@@ -98,11 +116,89 @@ stream_tasks = {}
 stream_stop_events = {}
 stream_jpeg_cache = {}
 viewer_counts = {}
+stream_configs = {}
+auto_quality_index = 1
+auto_quality_high_count = 0
+auto_quality_low_count = 0
 
-def _encode_jpeg(frame):
-    params = [int(cv2.IMWRITE_JPEG_QUALITY), JPEG_QUALITY]
+def _encode_jpeg(frame, quality):
+    params = [int(cv2.IMWRITE_JPEG_QUALITY), int(quality)]
     ret, buf = cv2.imencode('.jpg', frame, params)
     return buf if ret else None
+
+def _match_preset_label(cfg):
+    for preset in QUALITY_PRESETS:
+        if (
+            int(cfg.get("width", 0)) == preset["width"]
+            and int(cfg.get("height", 0)) == preset["height"]
+        ):
+            return preset["label"]
+    return cfg.get("label", "720p")
+
+def _get_gpu_stats():
+    try:
+        if not torch.cuda.is_available():
+            return None
+        result = subprocess.run(
+            [
+                "nvidia-smi",
+                "--query-gpu=utilization.gpu,temperature.gpu,memory.used,memory.total",
+                "--format=csv,noheader,nounits",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if result.returncode != 0:
+            return None
+        line = result.stdout.strip().splitlines()[0]
+        util, temp, mem_used, mem_total = [int(x.strip()) for x in line.split(",")]
+        return {"util": util, "temp": temp, "mem_used": mem_used, "mem_total": mem_total}
+    except Exception:
+        return None
+
+async def _auto_quality_loop():
+    global auto_quality_index, auto_quality_high_count, auto_quality_low_count
+    while True:
+        await asyncio.sleep(5)
+        cpu = psutil.cpu_percent(interval=0.1)
+        mem = psutil.virtual_memory().percent
+        gpu = _get_gpu_stats()
+        gpu_util = gpu["util"] if gpu else 0
+        gpu_temp = gpu["temp"] if gpu else 0
+
+        high = cpu >= 85 or mem >= 85 or gpu_util >= 90 or gpu_temp >= 83
+        low = cpu <= 55 and mem <= 65 and gpu_util <= 60 and (gpu_temp == 0 or gpu_temp <= 75)
+
+        if high:
+            auto_quality_high_count += 1
+            auto_quality_low_count = 0
+        elif low:
+            auto_quality_low_count += 1
+            auto_quality_high_count = 0
+        else:
+            auto_quality_high_count = 0
+            auto_quality_low_count = 0
+
+        if auto_quality_high_count >= 3 and auto_quality_index < len(QUALITY_PRESETS) - 1:
+            auto_quality_index += 1
+            auto_quality_high_count = 0
+        elif auto_quality_low_count >= 6 and auto_quality_index > 0:
+            auto_quality_index -= 1
+            auto_quality_low_count = 0
+        else:
+            continue
+
+        preset = QUALITY_PRESETS[auto_quality_index]
+        for cam_id in list(stream_configs.keys()):
+            stream_configs[cam_id] = {
+                "width": preset["width"],
+                "height": preset["height"],
+                "fps": preset["fps"],
+                "quality": preset["quality"],
+                "label": preset["label"],
+                "auto": True,
+            }
 
 async def _stream_worker(cam_id):
     source = camera_sources.get(cam_id)
@@ -112,7 +208,13 @@ async def _stream_worker(cam_id):
         while not stream_stop_events[cam_id].is_set():
             await asyncio.sleep(0.01)
             now = time.time()
-            if now - last_stream_sent.get(cam_id, 0) < (1.0 / STREAM_FPS):
+            cfg = stream_configs.get(cam_id, DEFAULT_STREAM_CONFIG)
+            fps = max(float(cfg.get("fps", STREAM_FPS)), 0.1)
+            width = int(cfg.get("width", STREAM_WIDTH))
+            height = int(cfg.get("height", STREAM_HEIGHT))
+            quality = int(cfg.get("quality", JPEG_QUALITY))
+            stream_size = (width, height)
+            if now - last_stream_sent.get(cam_id, 0) < (1.0 / fps):
                 continue
 
             if is_rtsp:
@@ -123,9 +225,9 @@ async def _stream_worker(cam_id):
                     except Exception:
                         pass
                     if not cap.isOpened():
-                        buf = _encode_jpeg(offline_frame)
+                        buf = _encode_jpeg(offline_frame, quality)
                         if buf is not None:
-                            stream_jpeg_cache[cam_id] = buf.tobytes()
+                            stream_jpeg_cache[cam_id] = (buf.tobytes(), now)
                             last_stream_sent[cam_id] = now
                         await asyncio.sleep(0.5)
                         continue
@@ -134,9 +236,9 @@ async def _stream_worker(cam_id):
                     if cap is not None:
                         cap.release()
                     cap = None
-                    buf = _encode_jpeg(offline_frame)
+                    buf = _encode_jpeg(offline_frame, quality)
                     if buf is not None:
-                        stream_jpeg_cache[cam_id] = buf.tobytes()
+                        stream_jpeg_cache[cam_id] = (buf.tobytes(), now)
                         last_stream_sent[cam_id] = now
                     await asyncio.sleep(0.5)
                     continue
@@ -154,32 +256,32 @@ async def _stream_worker(cam_id):
                         last_annotated_frames[cam_id] = display_frame
                     else:
                         display_frame = last_annotated_frames.get(cam_id, frame)
-                if STREAM_SIZE and (display_frame.shape[1], display_frame.shape[0]) != STREAM_SIZE:
-                    display_frame = cv2.resize(display_frame, STREAM_SIZE)
+                if stream_size and (display_frame.shape[1], display_frame.shape[0]) != stream_size:
+                    display_frame = cv2.resize(display_frame, stream_size)
 
-                buf = _encode_jpeg(display_frame)
+                buf = _encode_jpeg(display_frame, quality)
                 if buf is not None:
-                    stream_jpeg_cache[cam_id] = buf.tobytes()
+                    stream_jpeg_cache[cam_id] = (buf.tobytes(), now)
                     last_stream_sent[cam_id] = now
                 continue
 
             # robot/usb: use latest frame if available
             frame = camera_streams.get(cam_id)
             if frame is None:
-                buf = _encode_jpeg(offline_frame)
+                buf = _encode_jpeg(offline_frame, quality)
                 if buf is not None:
-                    stream_jpeg_cache[cam_id] = buf.tobytes()
+                    stream_jpeg_cache[cam_id] = (buf.tobytes(), now)
                     last_stream_sent[cam_id] = now
                 await asyncio.sleep(0.5)
                 continue
 
             display_frame = frame
-            if STREAM_SIZE and (display_frame.shape[1], display_frame.shape[0]) != STREAM_SIZE:
-                display_frame = cv2.resize(display_frame, STREAM_SIZE)
+            if stream_size and (display_frame.shape[1], display_frame.shape[0]) != stream_size:
+                display_frame = cv2.resize(display_frame, stream_size)
 
-            buf = _encode_jpeg(display_frame)
+            buf = _encode_jpeg(display_frame, quality)
             if buf is not None:
-                stream_jpeg_cache[cam_id] = buf.tobytes()
+                stream_jpeg_cache[cam_id] = (buf.tobytes(), now)
                 last_stream_sent[cam_id] = now
     finally:
         if cap is not None:
@@ -188,6 +290,16 @@ async def _stream_worker(cam_id):
 async def ensure_stream_task(cam_id):
     if cam_id in stream_tasks and not stream_tasks[cam_id].done():
         return
+    if cam_id not in stream_configs:
+        default_preset = QUALITY_PRESETS[1]
+        stream_configs[cam_id] = {
+            "width": default_preset["width"],
+            "height": default_preset["height"],
+            "fps": default_preset["fps"],
+            "quality": default_preset["quality"],
+            "label": default_preset["label"],
+            "auto": True,
+        }
     stream_stop_events[cam_id] = asyncio.Event()
     stream_tasks[cam_id] = asyncio.create_task(_stream_worker(cam_id))
 
@@ -228,6 +340,16 @@ def process_detection(cam_id, frame, current_time, require_verified_viewer):
     annotated_frame, new_ids, _ = detector.detect_and_track(cam_id, frame)
 
     if new_ids and (not require_verified_viewer or cam_id in verified_viewers):
+        original_cfg = stream_configs.get(cam_id, None)
+        if original_cfg:
+            stream_configs[cam_id] = {
+                "width": 1920,
+                "height": 1080,
+                "fps": max(original_cfg.get("fps", STREAM_FPS), 12),
+                "quality": 90,
+                "label": "alert-1080p",
+                "auto": False,
+            }
         status_changed = False
         if device_status.get(cam_id) != "DANGER":
             device_status[cam_id] = "DANGER"
@@ -243,6 +365,8 @@ def process_detection(cam_id, frame, current_time, require_verified_viewer):
             send_to_gateway(cam_id, "DANGER")
 
         last_heartbeat[cam_id] = current_time
+        if original_cfg:
+            stream_configs[cam_id] = original_cfg
 
     elif not new_ids and device_status.get(cam_id) == "DANGER":
         device_status[cam_id] = "SAFE"
@@ -355,9 +479,16 @@ async def video_feed(cam_id: str, request: Request):
                 if await request.is_disconnected():
                     break
                 await asyncio.sleep(0.03)
-                buf_bytes = stream_jpeg_cache.get(cam_id)
+                cache_entry = stream_jpeg_cache.get(cam_id)
+                buf_bytes = None
+                now = time.time()
+                if cache_entry is not None:
+                    cached_bytes, cached_ts = cache_entry
+                    if now - cached_ts <= STALE_FRAME_SEC:
+                        buf_bytes = cached_bytes
                 if buf_bytes is None:
-                    offline_buf = _encode_jpeg(offline_frame)
+                    cfg = stream_configs.get(cam_id, DEFAULT_STREAM_CONFIG)
+                    offline_buf = _encode_jpeg(offline_frame, cfg.get("quality", JPEG_QUALITY))
                     if offline_buf is not None:
                         buf_bytes = offline_buf.tobytes()
                 if buf_bytes is None:
@@ -378,6 +509,40 @@ async def video_feed(cam_id: str, request: Request):
             last_detect_time.pop(cam_id, None)
             last_annotated_frames.pop(cam_id, None)
     return StreamingResponse(generate(), media_type="multipart/x-mixed-replace; boundary=frame")
+
+@app.post("/streams/config/{cam_id}")
+async def update_stream_config(cam_id: str, payload: dict):
+    width = payload.get("width", DEFAULT_STREAM_CONFIG["width"])
+    height = payload.get("height", DEFAULT_STREAM_CONFIG["height"])
+    fps = payload.get("fps", DEFAULT_STREAM_CONFIG["fps"])
+    quality = payload.get("quality", DEFAULT_STREAM_CONFIG["quality"])
+    try:
+        width = int(width)
+        height = int(height)
+        fps = float(fps)
+        quality = int(quality)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid stream config")
+
+    label = payload.get("label")
+    stream_configs[cam_id] = {
+        "width": max(1, width),
+        "height": max(1, height),
+        "fps": max(0.1, fps),
+        "quality": max(1, min(100, quality)),
+        "label": label or _match_preset_label({"width": width, "height": height}),
+        "auto": False,
+    }
+    return {"status": "ok", "cam_id": cam_id, "config": stream_configs[cam_id]}
+
+@app.get("/streams/config/{cam_id}")
+async def get_stream_config(cam_id: str):
+    cfg = stream_configs.get(cam_id, DEFAULT_STREAM_CONFIG)
+    return {"status": "ok", "cam_id": cam_id, "config": cfg}
+
+@app.get("/streams/configs")
+async def get_stream_configs():
+    return {"status": "ok", "configs": stream_configs}
 
 @app.post("/update_mode/{robot_id}")
 async def update_mode(robot_id: str, mode_data: dict):
