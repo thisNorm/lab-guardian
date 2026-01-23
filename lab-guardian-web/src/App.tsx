@@ -5,7 +5,7 @@ import {
   AppBar, Toolbar, Typography, Paper, Button, Card, Stack, Box,
   List, ListItem, ListItemText, CssBaseline, keyframes,
   IconButton, TextField, Dialog, DialogTitle, DialogContent, DialogActions,
-  Tooltip, MenuItem
+  Tooltip, MenuItem, ClickAwayListener
 } from '@mui/material';
 import Grid from '@mui/material/Grid';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
@@ -44,9 +44,28 @@ const LS_KEYS = {
   uiState: 'lab_guardian_ui_state',
 };
 
+const navType = performance.getEntriesByType('navigation')[0]?.type;
+const shouldRestoreState = navType === 'reload';
+if (!shouldRestoreState) {
+  try {
+    localStorage.removeItem(LS_KEYS.devices);
+    localStorage.removeItem(LS_KEYS.logsCctv);
+    localStorage.removeItem(LS_KEYS.logsRobot);
+    localStorage.removeItem(LS_KEYS.uiState);
+  } catch {}
+}
+
+const QUALITY_PRESETS = [
+  { label: '1080p', width: 1920, height: 1080, fps: 15, quality: 90 },
+  { label: '720p', width: 1280, height: 720, fps: 12, quality: 85 },
+  { label: '480p', width: 854, height: 480, fps: 10, quality: 75 },
+  { label: '360p', width: 640, height: 360, fps: 8, quality: 70 },
+];
+
 function App() {
   const [devices, setDevices] = useState<Device[]>(() => {
     try {
+      if (!shouldRestoreState) return [];
       const raw = localStorage.getItem(LS_KEYS.devices);
       if (!raw) return [];
       const parsed = JSON.parse(raw);
@@ -58,6 +77,7 @@ function App() {
   
   const [cctvDisplayLogs, setCctvDisplayLogs] = useState<string[]>(() => {
     try {
+      if (!shouldRestoreState) return [];
       const raw = localStorage.getItem(LS_KEYS.logsCctv);
       if (!raw) return [];
       const parsed = JSON.parse(raw);
@@ -68,6 +88,7 @@ function App() {
   });
   const [robotDisplayLogs, setRobotDisplayLogs] = useState<string[]>(() => {
     try {
+      if (!shouldRestoreState) return [];
       const raw = localStorage.getItem(LS_KEYS.logsRobot);
       if (!raw) return [];
       const parsed = JSON.parse(raw);
@@ -78,6 +99,7 @@ function App() {
   });
   const [logHeight, setLogHeight] = useState(() => {
     try {
+      if (!shouldRestoreState) return 200;
       const raw = localStorage.getItem(LS_KEYS.uiState);
       if (!raw) return 200;
       const parsed = JSON.parse(raw);
@@ -104,6 +126,8 @@ function App() {
   const [cctvMode, setCctvMode] = useState<'rtsp' | 'usb'>('rtsp');
   const [registerError, setRegisterError] = useState('');
   const [isRegistering, setIsRegistering] = useState(false);
+  const [qualityMenuDeviceId, setQualityMenuDeviceId] = useState<string | null>(null);
+  const [qualityByDevice, setQualityByDevice] = useState<Record<string, string>>({});
   
   const [videoErrors, setVideoErrors] = useState<Record<string, boolean>>({});
   
@@ -156,6 +180,24 @@ function App() {
   }, [robotDisplayLogs]);
 
   useEffect(() => {
+    const interval = window.setInterval(async () => {
+      if (devicesRef.current.length === 0) return;
+      try {
+        const res = await fetch(`${NETWORK_CONFIG.ALGO_API_URL}/streams/configs`);
+        const data = await res.json().catch(() => ({}));
+        if (data?.configs) {
+          const next: Record<string, string> = {};
+          Object.entries(data.configs).forEach(([id, cfg]: any) => {
+            if (cfg?.label) next[id] = String(cfg.label);
+          });
+          setQualityByDevice(prev => ({ ...prev, ...next }));
+        }
+      } catch {}
+    }, 4000);
+    return () => window.clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
     try {
       localStorage.setItem(LS_KEYS.uiState, JSON.stringify({
         logHeight,
@@ -199,7 +241,8 @@ function App() {
         const normalizedId = deviceId.toUpperCase();
 
         // 2. 상태 업데이트 (테두리 색상 변경용)
-        const isKnownDevice = devicesRef.current.some(d => d.id.toUpperCase() === normalizedId);
+        const matchedDevice = devicesRef.current.find(d => d.id.toUpperCase() === normalizedId);
+        const isKnownDevice = Boolean(matchedDevice);
         if (!isKnownDevice) return;
 
         // 2. ?? ???? (??? ?? ???)
@@ -225,7 +268,7 @@ function App() {
         // 스냅샷 경로는 별도 데이터로 유지하고, 로그 문구에는 포함하지 않음
 
         // 4. 로그 분류 및 저장
-        const isStaticCctv = normalizedId.includes('CCTV') || normalizedId.includes('WEBCAM');
+        const isStaticCctv = matchedDevice?.type === 'CCTV' || normalizedId.includes('CCTV') || normalizedId.includes('WEBCAM');
 
         if (isStaticCctv) {
           setCctvDisplayLogs(prev => [displayMsg, ...prev].slice(0, 50));
@@ -351,6 +394,8 @@ function App() {
         setIsRegistering(true);
         if (cctvMode === 'usb') {
           setDevices(prev => [...prev, { id: camId, name: camId, status: 'IDLE', type: 'CCTV' }]);
+          const defaultPreset = QUALITY_PRESETS.find(p => p.label === '720p') || QUALITY_PRESETS[1];
+          applyQualityPresetToDevice(camId, defaultPreset);
           setOpen(false);
           setNewName('');
           setNewIp('');
@@ -386,6 +431,8 @@ function App() {
         }
 
         setDevices(prev => [...prev, { id: camId, name: camId, status: 'IDLE', type: 'CCTV' }]);
+        const defaultPreset = QUALITY_PRESETS.find(p => p.label === '720p') || QUALITY_PRESETS[1];
+        applyQualityPresetToDevice(camId, defaultPreset);
         setOpen(false);
         setNewName('');
         setNewIp('');
@@ -407,9 +454,45 @@ function App() {
     }
 
     setDevices(prev => [...prev, { id: camId, name: camId, status: 'IDLE', type: 'ROBOT' }]);
+    const defaultPreset = QUALITY_PRESETS.find(p => p.label === '720p') || QUALITY_PRESETS[1];
+    applyQualityPresetToDevice(camId, defaultPreset);
     setOpen(false);
     resetDeviceForm();
   };
+
+  const toggleQualityMenu = (devId: string) => {
+    setQualityMenuDeviceId(prev => (prev === devId ? null : devId));
+  };
+
+  const closeQualityMenu = () => {
+    setQualityMenuDeviceId(null);
+  };
+
+  const applyQualityPresetToDevice = async (devId: string, preset: typeof QUALITY_PRESETS[number]) => {
+    if (!devId) return;
+    try {
+      await fetch(`${NETWORK_CONFIG.ALGO_API_URL}/streams/config/${devId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          width: preset.width,
+          height: preset.height,
+          fps: preset.fps,
+          quality: preset.quality,
+          label: preset.label,
+        }),
+      });
+      setQualityByDevice(prev => ({ ...prev, [devId]: preset.label }));
+    } catch {}
+  };
+
+  const applyQualityPreset = async (preset: typeof QUALITY_PRESETS[number]) => {
+    if (!qualityMenuDeviceId) return;
+    await applyQualityPresetToDevice(qualityMenuDeviceId, preset);
+    closeQualityMenu();
+  };
+
+  const getQualityLabel = (devId: string) => qualityByDevice[devId] || '720p';
 
   const DeviceCard = ({ dev, isMaximized, onMaximize }: { dev: Device, isMaximized: boolean, onMaximize: () => void }) => (
     <Card sx={{ 
@@ -429,6 +512,54 @@ function App() {
           {dev.name} {dev.status === 'DANGER' && "🚨"}
         </Typography>
         <Box>
+          <Box sx={{ position: 'relative', display: 'inline-flex', mr: 0.5 }}>
+            <Button
+              size="small"
+              onClick={() => toggleQualityMenu(dev.id)}
+              sx={{ color: '#90caf9', minWidth: 'auto', fontSize: '0.7rem' }}
+            >
+              {getQualityLabel(dev.id)} ▼
+            </Button>
+            {qualityMenuDeviceId === dev.id && (
+              <ClickAwayListener onClickAway={closeQualityMenu}>
+                <Paper
+                  elevation={6}
+                  sx={{
+                    position: 'absolute',
+                    top: '100%',
+                    right: 0,
+                    mt: 0.5,
+                    minWidth: 180,
+                    border: '1px solid rgba(144,202,249,0.35)',
+                    bgcolor: '#0b141f',
+                    boxShadow: '0 12px 30px rgba(0,0,0,0.45)',
+                    zIndex: 2000,
+                  }}
+                >
+                  <Box sx={{ px: 1, py: 0.5, fontSize: '0.65rem', letterSpacing: 1, color: 'rgba(144,202,249,0.9)' }}>
+                    QUALITY
+                  </Box>
+                  {QUALITY_PRESETS.map(preset => (
+                    <MenuItem
+                      key={preset.label}
+                      onClick={() => applyQualityPreset(preset)}
+                      sx={{
+                        fontSize: '0.8rem',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        gap: 1,
+                        color: '#e3f2fd',
+                        '&:hover': { bgcolor: 'rgba(144,202,249,0.12)' },
+                      }}
+                    >
+                      <span>{preset.label}</span>
+                      <span style={{ opacity: 0.7 }}>{preset.width}x{preset.height} · {preset.fps}fps</span>
+                    </MenuItem>
+                  ))}
+                </Paper>
+              </ClickAwayListener>
+            )}
+          </Box>
           <IconButton size="small" onClick={onMaximize} sx={{ color: 'white' }}>
             {isMaximized ? <FullscreenExitIcon /> : <FullscreenIcon />}
           </IconButton>
@@ -699,6 +830,7 @@ function App() {
           </Button>
         </DialogActions>
       </Dialog>
+
     </ThemeProvider>
   );
 }
