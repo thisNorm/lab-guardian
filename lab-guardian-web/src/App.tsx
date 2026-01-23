@@ -123,6 +123,7 @@ function App() {
   const [newStream, setNewStream] = useState<'sub' | 'main'>('sub');
   const [newRtspPath, setNewRtspPath] = useState('');
   const [newRtspPort, setNewRtspPort] = useState('554');
+  const [newRtspTransport, setNewRtspTransport] = useState<'auto' | 'tcp' | 'udp'>('auto');
   const [cctvMode, setCctvMode] = useState<'rtsp' | 'usb'>('rtsp');
   const [registerError, setRegisterError] = useState('');
   const [isRegistering, setIsRegistering] = useState(false);
@@ -130,6 +131,7 @@ function App() {
   const [qualityByDevice, setQualityByDevice] = useState<Record<string, string>>({});
   
   const [videoErrors, setVideoErrors] = useState<Record<string, boolean>>({});
+  const [videoRetryKey, setVideoRetryKey] = useState<Record<string, number>>({});
   
   const gatewaySocketRef = useRef<WebSocket | null>(null);
   const robotSocketRef = useRef<Socket | null>(null);
@@ -180,6 +182,7 @@ function App() {
   }, [robotDisplayLogs]);
 
   useEffect(() => {
+    let failCount = 0;
     const interval = window.setInterval(async () => {
       if (devicesRef.current.length === 0) return;
       try {
@@ -192,7 +195,17 @@ function App() {
           });
           setQualityByDevice(prev => ({ ...prev, ...next }));
         }
+        failCount = 0;
       } catch {}
+      failCount += 1;
+      if (failCount >= 3) {
+        failCount = 0;
+        setDevices([]);
+        setCctvDisplayLogs([]);
+        setRobotDisplayLogs([]);
+        setVideoErrors({});
+        setQualityByDevice({});
+      }
     }, 4000);
     return () => window.clearInterval(interval);
   }, []);
@@ -375,6 +388,7 @@ function App() {
     setNewStream('sub');
     setNewRtspPath('');
     setNewRtspPort('554');
+    setNewRtspTransport('auto');
     setCctvMode('rtsp');
     setRegisterError('');
     setIsRegistering(false);
@@ -418,6 +432,7 @@ function App() {
             stream: newStream,
             path: newRtspPath.trim() || undefined,
             port: newRtspPort.trim() || undefined,
+            transport: newRtspTransport,
           }),
         });
 
@@ -441,6 +456,7 @@ function App() {
         setNewStream('sub');
         setNewRtspPath('');
         setNewRtspPort('554');
+        setNewRtspTransport('auto');
         setCctvMode('rtsp');
         setRegisterError('');
         setIsRegistering(false);
@@ -564,7 +580,16 @@ function App() {
             {isMaximized ? <FullscreenExitIcon /> : <FullscreenIcon />}
           </IconButton>
           {!isMaximized && (
-            <IconButton size="small" onClick={() => setDevices(prev => prev.filter(d => d.id !== dev.id))} sx={{ color: '#ff5252' }}>
+            <IconButton
+              size="small"
+              onClick={() => {
+                setDevices(prev => prev.filter(d => d.id !== dev.id));
+                if (dev.type === 'CCTV') {
+                  fetch(`${NETWORK_CONFIG.ALGO_API_URL}/cameras/unregister/${dev.id}`, { method: 'POST' }).catch(() => {});
+                }
+              }}
+              sx={{ color: '#ff5252' }}
+            >
               <DeleteIcon sx={{ fontSize: 16 }} />
             </IconButton>
           )}
@@ -579,7 +604,7 @@ function App() {
           </Stack>
         ) : (
           <img 
-            src={`${NETWORK_CONFIG.ALGO_API_URL}/video_feed/${dev.id}`} 
+            src={`${NETWORK_CONFIG.ALGO_API_URL}/video_feed/${dev.id}?t=${videoRetryKey[dev.id] || 0}`} 
             alt={dev.id}
             onError={() => setVideoErrors(prev => ({ ...prev, [dev.id]: true }))}
             style={{ width: '100%', height: '100%', objectFit: isMaximized ? 'contain' : 'cover', display: 'block' }} 
@@ -789,6 +814,19 @@ function App() {
                 <MenuItem value="main">main</MenuItem>
               </TextField>
               <TextField
+                select
+                fullWidth
+                variant="filled"
+                label="RTSP Transport"
+                value={newRtspTransport}
+                onChange={(e) => setNewRtspTransport(e.target.value as 'auto' | 'tcp' | 'udp')}
+                sx={{ mt: 1 }}
+              >
+                <MenuItem value="auto">auto</MenuItem>
+                <MenuItem value="tcp">tcp</MenuItem>
+                <MenuItem value="udp">udp</MenuItem>
+              </TextField>
+              <TextField
                 fullWidth
                 variant="filled"
                 label="RTSP Path (optional)"
@@ -833,6 +871,28 @@ function App() {
 
     </ThemeProvider>
   );
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      const hasError = Object.values(videoErrors).some(Boolean);
+      if (!hasError) return;
+      setVideoErrors(prev => {
+        const next = { ...prev };
+        Object.keys(next).forEach(id => {
+          if (next[id]) next[id] = false;
+        });
+        return next;
+      });
+      setVideoRetryKey(prev => {
+        const next: Record<string, number> = { ...prev };
+        Object.keys(videoErrors).forEach(id => {
+          if (videoErrors[id]) next[id] = Date.now();
+        });
+        return next;
+      });
+    }, 3000);
+    return () => window.clearInterval(interval);
+  }, [videoErrors]);
 }
 
 export default App;

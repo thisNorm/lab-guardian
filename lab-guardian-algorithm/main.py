@@ -44,6 +44,8 @@ STREAM_SIZE = (STREAM_WIDTH, STREAM_HEIGHT)
 
 JPEG_QUALITY = int(os.getenv("JPEG_QUALITY", "85"))
 STALE_FRAME_SEC = float(os.getenv("STALE_FRAME_SEC", "2.0"))
+DROP_LAG_SEC = float(os.getenv("DROP_LAG_SEC", "3.0"))
+DROP_LAG_FRAMES = int(os.getenv("DROP_LAG_FRAMES", "3"))
 
 QUALITY_PRESETS = [
     {"label": "1080p", "width": 1920, "height": 1080, "fps": 15, "quality": 90},
@@ -107,11 +109,14 @@ verified_viewers = set()
 monitoring_enabled = set()
 last_alert_times = {}
 ALERT_COOLDOWN = 30
+_danger_hold_raw = float(os.getenv("DANGER_HOLD_SEC", "3.0"))
+DANGER_HOLD_SEC = max(_danger_hold_raw, 1.0)
 error_last_log = {}
 ERROR_LOG_COOLDOWN = 5.0
 last_stream_sent = {}
 last_detect_time = {}
 last_annotated_frames = {}
+last_danger_time = {}
 stream_tasks = {}
 stream_stop_events = {}
 stream_jpeg_cache = {}
@@ -134,6 +139,32 @@ def _match_preset_label(cfg):
         ):
             return preset["label"]
     return cfg.get("label", "720p")
+
+def _open_rtsp_capture(url, transport):
+    os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = (
+        "rtsp_transport;udp|fflags;nobuffer|flags;low_delay|max_delay;0|reorder_queue_size;0|stimeout;2000000"
+        if transport == "udp"
+        else "rtsp_transport;tcp|fflags;nobuffer|flags;low_delay|max_delay;0|reorder_queue_size;0|stimeout;2000000"
+    )
+    cap = cv2.VideoCapture(url, cv2.CAP_FFMPEG)
+    try:
+        cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+    except Exception:
+        pass
+    return cap
+
+def _test_rtsp_connection(url, transport):
+    cap = _open_rtsp_capture(url, transport)
+    try:
+        if not cap.isOpened():
+            return False
+        ok, frame = cap.read()
+        return bool(ok and frame is not None)
+    finally:
+        try:
+            cap.release()
+        except Exception:
+            pass
 
 def _get_gpu_stats():
     try:
@@ -203,6 +234,7 @@ async def _auto_quality_loop():
 async def _stream_worker(cam_id):
     source = camera_sources.get(cam_id)
     is_rtsp = source and source.get("type") == "rtsp"
+    transport = (source.get("transport") if source else None) or "tcp"
     cap = None
     try:
         while not stream_stop_events[cam_id].is_set():
@@ -219,12 +251,26 @@ async def _stream_worker(cam_id):
 
             if is_rtsp:
                 if cap is None or not cap.isOpened():
-                    cap = cv2.VideoCapture(source.get("url"), cv2.CAP_FFMPEG)
-                    try:
-                        cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-                    except Exception:
-                        pass
-                    if not cap.isOpened():
+                    url = source.get("url")
+                    order = []
+                    if transport == "auto":
+                        last_transport = source.get("active_transport")
+                        if last_transport in ("tcp", "udp"):
+                            order = [last_transport, "udp" if last_transport == "tcp" else "tcp"]
+                        else:
+                            order = ["udp", "tcp"]
+                    else:
+                        order = [transport]
+                    cap = None
+                    for candidate in order:
+                        attempt = _open_rtsp_capture(url, candidate)
+                        if attempt.isOpened():
+                            cap = attempt
+                            if transport == "auto":
+                                source["active_transport"] = candidate
+                            break
+                        attempt.release()
+                    if not cap or not cap.isOpened():
                         buf = _encode_jpeg(offline_frame, quality)
                         if buf is not None:
                             stream_jpeg_cache[cam_id] = (buf.tobytes(), now)
@@ -244,6 +290,14 @@ async def _stream_worker(cam_id):
                     continue
 
                 display_frame = frame
+                # 조건부 지연 해소: 지연이 클 때만 짧게 프레임 드롭
+                if now - last_stream_sent.get(cam_id, 0) > DROP_LAG_SEC:
+                    for _ in range(max(1, DROP_LAG_FRAMES)):
+                        if not cap.grab():
+                            break
+                    ok, latest = cap.read()
+                    if ok and latest is not None:
+                        display_frame = latest
                 if cam_id in monitoring_enabled:
                     if now - last_detect_time.get(cam_id, 0) >= (1.0 / DETECT_FPS):
                         display_frame, _ = process_detection(
@@ -354,6 +408,7 @@ def process_detection(cam_id, frame, current_time, require_verified_viewer):
         if device_status.get(cam_id) != "DANGER":
             device_status[cam_id] = "DANGER"
             status_changed = True
+        last_danger_time[cam_id] = current_time
 
         if current_time - last_alert_times.get(cam_id, 0) > ALERT_COOLDOWN:
             img_path = recorder.save_snapshot(cam_id, frame)
@@ -369,6 +424,12 @@ def process_detection(cam_id, frame, current_time, require_verified_viewer):
             stream_configs[cam_id] = original_cfg
 
     elif not new_ids and device_status.get(cam_id) == "DANGER":
+        last_danger = last_danger_time.get(cam_id, 0)
+        last_alert = last_alert_times.get(cam_id, 0)
+        if current_time - last_danger < DANGER_HOLD_SEC:
+            return annotated_frame, new_ids
+        if current_time - last_alert < DANGER_HOLD_SEC:
+            return annotated_frame, new_ids
         device_status[cam_id] = "SAFE"
         last_heartbeat[cam_id] = current_time
         send_to_gateway(cam_id, "SAFE")
@@ -434,6 +495,9 @@ async def register_camera(payload: dict):
     stream = str(payload.get("stream", "sub")).strip().lower() or "sub"
     path = str(payload.get("path", "")).strip() or None
     port_raw = payload.get("port", 554)
+    transport = str(payload.get("transport", "auto")).strip().lower() or "auto"
+    if transport not in ("tcp", "udp", "auto"):
+        transport = "auto"
     try:
         port = int(port_raw)
     except Exception:
@@ -448,20 +512,43 @@ async def register_camera(payload: dict):
     masked = mask_rtsp_url(ip, stream, port=port, path=path)
 
     try:
-        cap = cv2.VideoCapture(rtsp_url, cv2.CAP_FFMPEG)
-        if not cap.isOpened():
-            cap.release()
-            raise HTTPException(status_code=400, detail="RTSP connection failed")
-        cap.read()
-        cap.release()
+        active_transport = None
+        if transport == "auto":
+            if _test_rtsp_connection(rtsp_url, "udp"):
+                active_transport = "udp"
+            elif _test_rtsp_connection(rtsp_url, "tcp"):
+                active_transport = "tcp"
+            else:
+                raise HTTPException(status_code=400, detail="RTSP connection failed")
+        else:
+            if not _test_rtsp_connection(rtsp_url, transport):
+                raise HTTPException(status_code=400, detail="RTSP connection failed")
     except HTTPException:
         raise
     except Exception:
         raise HTTPException(status_code=500, detail="RTSP connection error")
 
-    camera_sources[cam_id] = {"type": "rtsp", "url": rtsp_url}
+    source_info = {"type": "rtsp", "url": rtsp_url, "transport": transport}
+    if transport == "auto" and active_transport:
+        source_info["active_transport"] = active_transport
+    camera_sources[cam_id] = source_info
     print(f"[rtsp] registered {cam_id} -> {masked}")
     return {"status": "connected", "cam_id": cam_id, "stream": stream}
+
+@app.post("/cameras/unregister/{cam_id}")
+async def unregister_camera(cam_id: str):
+    camera_sources.pop(cam_id, None)
+    stream_configs.pop(cam_id, None)
+    stream_jpeg_cache.pop(cam_id, None)
+    last_stream_sent.pop(cam_id, None)
+    last_detect_time.pop(cam_id, None)
+    last_annotated_frames.pop(cam_id, None)
+    monitoring_enabled.discard(cam_id)
+    active_viewers.discard(cam_id)
+    verified_viewers.discard(cam_id)
+    if cam_id in stream_stop_events:
+        stream_stop_events[cam_id].set()
+    return {"status": "ok", "cam_id": cam_id}
 
 @app.get("/video_feed/{cam_id}")
 async def video_feed(cam_id: str, request: Request):
