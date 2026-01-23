@@ -1,4 +1,4 @@
-# 🛡️ ETRI Lab Guardian System
+﻿# 🛡️ ETRI Lab Guardian System
 > **AI 기반 다중 로봇 및 CCTV 통합 실험실 안전 관제 시스템**
 > <br/>(AI-Powered Multi-Robot & CCTV Laboratory Safety Monitoring System)
 
@@ -68,10 +68,10 @@ graph TD
 ## 2. Standardized Event Flow (이벤트 흐름)
 모든 이벤트는 일관된 메시지 포맷으로 처리되어 DB와 웹에 동일하게 기록됩니다.
 
-| **상태 \(Status\)** | **내용 \(Message\)** | **비고**             |
+| **상태 (Status)** | **내용 (Message)** | **비고**             |
 |-------------------|--------------------|--------------------|
 | DANGER            | 🚨 침입자 감지! (📸 스냅샷)        | 이미지 경로 포함, 즉시 텔레그램 전송 및 녹화 시작 |
-| SAFE              | ✅ 이상 없음 \(정기 보고\)  | 10분 주기 하트비트 보고     |
+| SAFE              | ✅ 이상 없음 (정기 보고)  | 10분 주기 하트비트 보고     |
 | CONNECTED         | 🌐 장치 연결 성공        | 장치 최초 접속 시 기록      |
 | DISCONNECTED      | ❌ 장치 연결 끊김         | 5초 이상 신호 부재 시 기록   |
 | CONTROL           | 🎮 조종 모드 진입        | 전체화면 조종 시 기록       |
@@ -162,7 +162,6 @@ python main_server.py
 
 ---
 
-
 ## Runtime Checklist (2026-01-22)
 
 Required local services
@@ -201,6 +200,27 @@ Quick smoke tests
 - curl "http://localhost:8081/api/logs/recent?take=10&type=all"
 - curl http://localhost:8000/admin/dlq
 
+---
+
+## 📊 Performance & Metrics (Observed)
+아래 수치는 **개발 PC(유선 LAN, RTX 3090 환경) 기준 관측값**입니다. 장치 수, 해상도, 네트워크 품질에 따라 달라질 수 있습니다.
+
+### 1) 자원 사용량 변화 (CPU/GPU)
+- **초기**: CPU **30~45%** (GPU 거의 사용 안 됨)
+- **개선 단계 1**: GPU **30~40%** 활용 (CPU 의존도 감소)
+- **개선 단계 2 (현재)**: CPU **5~10%**, GPU **15~25%**
+
+### 2) 스트리밍 품질/부하 제어
+- 기본 연결 시 720p로 시작 → 부하 높으면 자동 480p/360p로 하향
+- 부하 여유 시 1080p까지 자동 상향
+- 침입 감지 순간에는 **경보 품질 우선(일시 1080p)** 적용 후 원래 설정으로 복귀
+
+### 3) RTSP 전송 안정성
+- TCP/UDP **자동 전환(auto)** 지원
+- 연결 실패 시 **다른 전송 방식으로 재시도**하여 연결 성공률 개선
+
+---
+
 ## 🛠️ Troubleshooting (해결 사례)
 
 ### 1. Hardware & Network (하드웨어 및 네트워크)
@@ -233,28 +253,6 @@ Quick smoke tests
 
 DLQ 확인 및 수동 복구: GET /admin/dlq, POST /admin/dlq/replay
 게이트웨이 로그 목록: GET http://{PC_IP}:8081/api/logs/recent (옵션: /api/queues, /api/dlq)
-
-### 4. Performance & CPU (성능/CPU)
-- **카메라 2대 이상에서 CPU 30~45% 상승**
-  - **원인:** RTSP 디코딩 + MJPEG 인코딩이 CPU에서 수행됨. YOLO는 GPU로 가더라도 I/O는 CPU에 남음.
-  - **해결:** 아래 순서대로 적용 (점진적)
-    1) `STREAM_FPS` 낮추기 (10 → 5)
-    2) `STREAM_WIDTH/HEIGHT` 낮추기 (640x360 → 480x270)
-    3) `DETECT_FPS` 낮추기 (3 → 2)
-  - **권장 값(2대 기준):**
-    - STREAM_FPS=8
-    - DETECT_FPS=2
-    - STREAM_WIDTH=640
-    - STREAM_HEIGHT=360
-
-- **화질 자동 조정(부하 기반)**
-  - **기본:** 장치 추가 시 720p로 시작
-  - **제어 API:**
-    - POST `/streams/config/{cam_id}` (width/height/fps/quality/label)
-    - GET `/streams/config/{cam_id}` (장치별 설정)
-    - GET `/streams/configs` (전체 설정 목록)
-  - **자동 조정 규칙(요약):** CPU/메모리/GPU 부하가 높으면 360p로 하향, 여유가 생기면 1080p로 상향.
-  - **경보 시 고화질:** 침입 감지 순간에는 1080p로 일시 상향 후 원래 설정으로 복귀.
 
 ---
 
