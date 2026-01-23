@@ -1,19 +1,32 @@
 import cv2
 import requests
 import time
-import pyrealsense2 as rs
 import numpy as np
 import config 
 import sys
+import platform
 
-SERVER_IP = f"http://192.168.0.149:{config.PORT_ALGO}" 
+try:
+    import pyrealsense2 as rs
+except ImportError:
+    rs = None
+
+SERVER_IP = f"http://{config.PC_IP}:{config.PORT_ALGO}" 
 WIDTH, HEIGHT = 320, 240 
+IS_MAC = sys.platform == "darwin"
+USE_REALSENSE = getattr(config, "USE_REALSENSE", False)
 
 class RealSenseCamera:
     def __init__(self):
         self.id = "CCTV_RealSense_999"
         self.active = False
         self.pipeline = None
+        if not USE_REALSENSE:
+            print("ℹ️ 설정상 RealSense 사용이 비활성화되어 건너뜁니다.")
+            return
+        if rs is None:
+            print("ℹ️ RealSense SDK(pyrealsense2)가 없어 해당 장치는 건너뜁니다.")
+            return
         try:
             self.pipeline = rs.pipeline()
             rs_config = rs.config()
@@ -46,7 +59,13 @@ class GenericCamera:
     def __init__(self, index):
         self.index = index
         self.id = f"CCTV_Webcam_{200 + index}"
-        self.cap = cv2.VideoCapture(index, cv2.CAP_DSHOW) # 속도 향상을 위해 DSHOW 권장
+        backend = cv2.CAP_DSHOW
+        if IS_MAC:
+            backend = cv2.CAP_AVFOUNDATION
+        elif sys.platform.startswith("linux"):
+            backend = cv2.CAP_V4L2
+
+        self.cap = cv2.VideoCapture(index, backend)
         
         if self.cap.isOpened():
             # 1. 버퍼 사이즈 최소화 (지연 시간 해결 핵심)
@@ -112,7 +131,11 @@ def main():
                     _, img_encoded = cv2.imencode('.jpg', frame, [int(cv2.IMWRITE_JPEG_QUALITY), 85])
                     files = {'file': ('image.jpg', img_encoded.tobytes(), 'image/jpeg')}
                     try:
-                        session.post(f"{SERVER_IP}/upload_frame/{cam_id}", files=files, timeout=0.1)
+                        session.post(
+                            f"{SERVER_IP}/upload_frame/{cam_id}",
+                            files=files,
+                            timeout=(1.0, 5.0),  # 연결/응답 타임아웃 여유를 줘서 프레임 누락 방지
+                        )
                     except: pass
             time.sleep(0.01)
     except KeyboardInterrupt:
