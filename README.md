@@ -1,6 +1,6 @@
 ﻿# 🛡️ ETRI Lab Guardian System
-> **AI 기반 다중 로봇 및 CCTV 통합 실험실 안전 관제 시스템**
-> <br/>(AI-Powered Multi-Robot & CCTV Laboratory Safety Monitoring System)
+> **AI 기반 객체 인식 및 로봇 원격 대응을 위한 로봇·카메라 통합 시스템의 설계, 구현 및 운영**
+> <br/>(Design, Implementation, and Operation of an AI-Based Integrated Robot–Camera System for Object Recognition and Remote Robotic Response)
 
 <div align="center">
 
