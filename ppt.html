@@ -1,0 +1,4813 @@
+﻿<!DOCTYPE html>
+<html lang="ko" data-theme="light">
+<head>
+  <meta charset="utf-8" />
+  <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+  <title>폐쇄망 AI 기반 통합 관제 시스템 - Slides</title>
+
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700;900&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css" rel="stylesheet">
+
+  <style>
+    :root { --w: 1280px; --h: 720px; }
+    body{
+      font-family:'Noto Sans KR',sans-serif;
+      margin:0; padding:0; overflow:hidden;
+      background:#0b1224;
+      display:flex; align-items:center; justify-content:center;
+      height:100vh;
+    }
+    .deck {
+      width: var(--w);
+      height: var(--h);
+      position: relative;
+      background:#0f172a;
+      box-shadow: 0 25px 80px rgba(0,0,0,.55);
+      border-radius: 16px;
+      overflow: hidden;
+    }
+    .slide {
+      position:absolute; inset:0;
+      opacity:0;
+      pointer-events:none;
+      transform:translateX(18px);
+      transition:opacity .28s ease, transform .28s ease;
+    }
+    .slide.active {
+      opacity:1;
+      pointer-events:auto;
+      transform:translateX(0);
+      z-index:2;
+    }
+    .kbd-help {
+      position:absolute; left:18px; bottom:14px;
+      font-size:12px; color:#94a3b8;
+      z-index:9999;
+      user-select:none;
+      background:rgba(15,23,42,.65);
+      border:1px solid rgba(148,163,184,.25);
+      padding:6px 10px;
+      border-radius:999px;
+      backdrop-filter: blur(6px);
+      white-space: nowrap;
+      display: none;
+    }
+    .nav-btn {
+      position:absolute; top:50%; transform:translateY(-50%);
+      width:44px; height:44px;
+      border-radius:999px;
+      display:flex; align-items:center; justify-content:center;
+      background:rgba(15,23,42,.75);
+      border:1px solid rgba(148,163,184,.2);
+      color:#e2e8f0;
+      z-index:9999;
+      cursor:pointer;
+      transition:.15s ease;
+      opacity:.32;
+      user-select:none;
+    }
+    .nav-btn:hover { transform: translateY(-50%) scale(1.05); border-color: rgba(59,130,246,.45); opacity:.95; }
+    .nav-btn:active { transform: translateY(-50%) scale(.98); }
+    .nav-prev { left:14px; }
+    .nav-next { right:14px; }
+    .scale-wrap{
+      transform-origin:center center;
+      will-change:transform;
+      backface-visibility:hidden;
+      -webkit-font-smoothing:antialiased;
+      text-rendering:geometricPrecision;
+    }
+
+    
+    .slide .slide-container {
+      justify-content: flex-start !important;
+      align-items: stretch !important;
+    }
+    section[data-index="0"] .slide-container {
+      justify-content: center !important;
+      align-items: center !important;
+    }
+
+    
+    .process-steps, .s5-process-steps { align-items: flex-start; }
+    .process-line, .s5-process-line { top: 30px; transform: none; }
+    .process-line-active, .s5-process-line-active { top: 30px; transform: none; }
+    .arrow-icon, .s5-arrow-icon { margin-top: 20px; }
+
+    
+    section[data-index="1"] .slide-container {
+      width: 1280px !important;
+      height: 720px !important;
+      overflow: hidden !important;
+    }
+    section[data-index="1"] .content-area {
+      display: flex !important;
+      flex-direction: row !important;
+      align-items: stretch !important;
+      justify-content: flex-start !important;
+      gap: 0 !important;
+      height: calc(100% - 80px) !important;
+      box-sizing: border-box !important;
+      padding: 24px 32px 20px !important;
+      overflow: hidden !important;
+    }
+    section[data-index="1"] .text-column {
+      flex: 1.2 !important;
+      padding-right: 40px !important;
+      display: flex !important;
+      flex-direction: column !important;
+      justify-content: space-between !important;
+      padding-top: 8px !important;
+      min-width: 0 !important;
+    }
+    section[data-index="1"] .visual-column {
+      flex: 0.8 !important;
+      display: flex !important;
+      flex-direction: column !important;
+      justify-content: flex-start !important;
+      align-items: center !important;
+      padding: 12px 20px 20px !important;
+      min-width: 0 !important;
+      overflow: hidden !important;
+    }
+    section[data-index="1"] .section-box {
+      flex: 1 1 0 !important;
+      display: flex !important;
+      flex-direction: column !important;
+      justify-content: center !important;
+      margin-bottom: 12px !important;
+      padding: 18px !important;
+    }
+    section[data-index="1"] .section-box:last-child {
+      margin-bottom: 0 !important;
+    }
+    section[data-index="1"] .section-title {
+      font-size: 16px !important;
+      margin-bottom: 8px !important;
+    }
+    section[data-index="1"] .section-desc {
+      font-size: 13px !important;
+      line-height: 1.45 !important;
+    }
+    section[data-index="1"] .visual-card {
+      width: 90% !important;
+      padding: 16px !important;
+      margin-bottom: 10px !important;
+      border-radius: 14px !important;
+    }
+    section[data-index="1"] .arrow-down {
+      margin: 0 0 8px 0 !important;
+      font-size: 20px !important;
+    }
+    section[data-index="1"] .card-content {
+      font-size: 13px !important;
+      line-height: 1.55 !important;
+      color: #94a3b8 !important;
+      padding-left: 56px !important;
+      margin-top: 2px !important;
+      white-space: normal !important;
+    }
+    section[data-index="1"] .card-header {
+      display: flex !important;
+      align-items: center !important;
+      justify-content: flex-start !important;
+      gap: 12px !important;
+      margin-bottom: 10px !important;
+    }
+    section[data-index="1"] .icon-wrapper {
+      margin-right: 0 !important;
+      flex: 0 0 48px !important;
+    }
+    section[data-index="1"] .card-title {
+      margin: 0 !important;
+      text-align: left !important;
+    }
+
+    
+    section[data-index="3"] .content-area {
+      display: flex !important;
+      flex-direction: row !important;
+      height: calc(100% - 80px) !important;
+      box-sizing: border-box !important;
+      padding: 14px 20px 12px !important;
+      gap: 12px !important;
+      align-items: stretch !important;
+      justify-content: flex-start !important;
+      overflow: hidden !important;
+    }
+    section[data-index="3"] .desc-panel {
+      flex: 0 0 27% !important;
+      max-width: 27% !important;
+      min-width: 27% !important;
+      height: 100% !important;
+      display: grid !important;
+      grid-template-rows: repeat(5, minmax(0, 1fr)) !important;
+      gap: 6px !important;
+      overflow-y: hidden !important;
+      overflow-x: hidden !important;
+    }
+    section[data-index="3"] .component-card {
+      padding: 10px 12px !important;
+      border-left-width: 2px !important;
+      border-radius: 0 6px 6px 0 !important;
+      background: rgba(30, 41, 59, 0.38) !important;
+      margin: 0 !important;
+      min-height: 0 !important;
+      display: flex !important;
+      flex-direction: column !important;
+      justify-content: center !important;
+    }
+    section[data-index="3"] .card-header {
+      font-size: 16px !important;
+      line-height: 1.15 !important;
+      margin-bottom: 6px !important;
+      font-weight: 800 !important;
+    }
+    section[data-index="3"] .card-desc {
+      font-size: 11px !important;
+      line-height: 1.25 !important;
+      color: #cbd5e1 !important;
+    }
+    section[data-index="3"] .tech-tag {
+      font-size: 9px !important;
+      margin-top: 3px !important;
+      padding: 2px 7px !important;
+      margin-right: 3px !important;
+      background: rgba(148, 163, 184, 0.2) !important;
+      color: #e2e8f0 !important;
+      border-radius: 5px !important;
+    }
+    section[data-index="3"] .card-icon {
+      width: 30px !important;
+      margin-right: 10px !important;
+    }
+    section[data-index="3"] .card-icon i {
+      font-size: 20px !important;
+      opacity: 1 !important;
+    }
+    section[data-index="3"] .comp-edge .card-header { color: #8ec5ff !important; }
+    section[data-index="3"] .comp-ai .card-header { color: #c7adff !important; }
+    section[data-index="3"] .comp-gateway .card-header { color: #63e6be !important; }
+    section[data-index="3"] .comp-web .card-header { color: #fcd34d !important; }
+    section[data-index="3"] .comp-ext .card-header { color: #cbd5e1 !important; }
+    section[data-index="3"] .comp-edge { border-left-color: #60a5fa !important; }
+    section[data-index="3"] .comp-ai { border-left-color: #a78bfa !important; }
+    section[data-index="3"] .comp-gateway { border-left-color: #34d399 !important; }
+    section[data-index="3"] .comp-web { border-left-color: #fbbf24 !important; }
+    section[data-index="3"] .comp-ext { border-left-color: #94a3b8 !important; }
+    section[data-index="3"] .comp-edge .card-icon i { color: #60a5fa !important; }
+    section[data-index="3"] .comp-ai .card-icon i { color: #a78bfa !important; }
+    section[data-index="3"] .comp-gateway .card-icon i { color: #34d399 !important; }
+    section[data-index="3"] .comp-web .card-icon i { color: #fbbf24 !important; }
+    section[data-index="3"] .comp-ext .card-icon i { color: #cbd5e1 !important; }
+    section[data-index="3"] .component-card .mt-1 {
+      margin-top: 6px !important;
+    }
+    section[data-index="3"] .diagram-panel {
+      flex: 1 !important;
+      min-width: 0 !important;
+      height: 100% !important;
+      padding: 14px !important;
+      overflow: hidden !important;
+      display: flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+    }
+    section[data-index="3"] .diagram-img {
+      width: auto !important;
+      height: auto !important;
+      max-width: 98% !important;
+      max-height: 92% !important;
+      object-fit: contain !important;
+      object-position: center center !important;
+      image-rendering: auto !important;
+      border-radius: 10px !important;
+      background: rgba(255, 255, 255, 0.05) !important;
+      box-shadow: inset 0 0 0 1px rgba(96, 165, 250, 0.18) !important;
+    }
+    section[data-index="3"] .diagram-svg {
+      width: 100% !important;
+      height: 100% !important;
+      border-radius: 10px !important;
+      background: rgba(255, 255, 255, 0.02) !important;
+    }
+    section[data-index="3"] .arch-diagram {
+      width: 100%;
+      height: 100%;
+      background: rgba(9, 20, 45, 0.9);
+      border: 2px solid rgba(37, 99, 235, 0.35);
+      border-radius: 12px;
+      position: relative;
+      padding: 14px;
+      display: grid;
+      grid-template-columns: 3.3fr 1.15fr;
+      gap: 10px;
+    }
+    section[data-index="3"] .arch-zone {
+      border: 2px dashed rgba(148, 163, 184, 0.55);
+      border-radius: 8px;
+      position: relative;
+      padding: 10px;
+      background: rgba(255, 255, 255, 0.03);
+    }
+    section[data-index="3"] .arch-zone-title {
+      position: absolute;
+      bottom: 6px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 14px;
+      font-weight: 800;
+      color: #dbeafe;
+      letter-spacing: 0.5px;
+    }
+    section[data-index="3"] .arch-flow {
+      height: 100%;
+      display: grid;
+      grid-template-columns: 1.25fr 1.1fr 1.1fr;
+      align-items: center;
+      gap: 8px;
+      padding-bottom: 28px;
+    }
+    section[data-index="3"] .arch-box {
+      background: #0a3f8d;
+      border: 1px solid rgba(96, 165, 250, 0.45);
+      border-radius: 8px;
+      min-height: 160px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      text-align: center;
+      padding: 8px;
+      color: #eff6ff;
+      font-weight: 700;
+    }
+    section[data-index="3"] .arch-box small {
+      display: block;
+      margin-top: 6px;
+      font-size: 11px;
+      font-weight: 500;
+      color: #cbd5e1;
+      line-height: 1.35;
+    }
+    section[data-index="3"] .arch-col {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      align-items: stretch;
+    }
+    section[data-index="3"] .arch-arrow {
+      text-align: center;
+      color: #7dd3fc;
+      font-size: 26px;
+      font-weight: 900;
+      line-height: 1;
+      margin: -2px 0;
+    }
+    section[data-index="3"] .arch-box.ext {
+      min-height: 130px;
+    }
+    section[data-index="3"] .legend-box {
+      bottom: 14px !important;
+      left: 14px !important;
+      font-size: 11px !important;
+      gap: 10px !important;
+      padding: 8px 10px !important;
+      z-index: 4 !important;
+      max-width: calc(100% - 28px) !important;
+      box-sizing: border-box !important;
+    }
+    section[data-index="3"] .boundary-label {
+      top: 14px !important;
+      right: 14px !important;
+      font-size: 11px !important;
+      padding: 4px 8px !important;
+      z-index: 4 !important;
+      box-sizing: border-box !important;
+    }
+
+    
+    section[data-index="4"] .process-steps {
+      align-items: flex-start !important;
+      position: relative !important;
+    }
+    section[data-index="4"] .process-line,
+    section[data-index="4"] .process-line-active {
+      top: 68px !important;
+      transform: none !important;
+      left: 50px !important;
+      right: 50px !important;
+    }
+    section[data-index="4"] .process-steps > .arrow-icon {
+      position: absolute !important;
+      top: 84px !important;
+      margin-top: 0 !important;
+      transform: translate(-50%, -115%) !important;
+      color: #64748b !important;
+      font-size: 22px !important;
+      line-height: 1 !important;
+      z-index: 3 !important;
+    }
+    section[data-index="4"] .process-steps > .arrow-icon:nth-of-type(1) { left: 25% !important; }
+    section[data-index="4"] .process-steps > .arrow-icon:nth-of-type(2) { left: 50% !important; }
+    section[data-index="4"] .process-steps > .arrow-icon:nth-of-type(3) { left: 75% !important; }
+
+    
+    section[data-index="5"] .content-area {
+      padding: 40px 32px 16px !important;
+      gap: 10px !important;
+      overflow: hidden !important;
+    }
+    section[data-index="5"] .slide-title-wrapper {
+      margin-top: 22px !important;
+      margin-bottom: 8px !important;
+      padding-top: 0 !important;
+      transform: none !important;
+      position: relative !important;
+      top: 0 !important;
+    }
+    section[data-index="5"] .slide-main-title {
+      font-size: 26px !important;
+      line-height: 1.2 !important;
+      margin-top: 0 !important;
+      margin-bottom: 4px !important;
+      font-weight: 900 !important;
+      letter-spacing: -0.02em !important;
+      transform: none !important;
+    }
+    section[data-index="5"] .slide-subtitle {
+      font-size: 14px !important;
+    }
+    section[data-index="5"] .columns-container {
+      height: 250px !important;
+      margin-bottom: 10px !important;
+      gap: 14px !important;
+    }
+    section[data-index="5"] .column-card {
+      border-radius: 16px !important;
+      padding: 12px 12px !important;
+      background: rgba(30, 41, 59, 0.32) !important;
+    }
+    section[data-index="5"] .icon-circle {
+      width: 42px !important;
+      height: 42px !important;
+      font-size: 18px !important;
+      margin-bottom: 8px !important;
+    }
+    section[data-index="5"] .card-title {
+      font-size: 16px !important;
+      line-height: 1.15 !important;
+      margin-bottom: 6px !important;
+    }
+    section[data-index="5"] .feature-item {
+      font-size: 11px !important;
+      line-height: 1.3 !important;
+      margin-bottom: 4px !important;
+    }
+    section[data-index="5"] .demo-section {
+      min-height: 300px !important;
+      border-radius: 12px !important;
+      overflow: hidden !important;
+      border: 1px solid rgba(59, 130, 246, 0.28) !important;
+    }
+    section[data-index="5"] .demo-header {
+      padding: 8px 14px !important;
+    }
+    section[data-index="5"] .demo-media-split {
+      flex: 1 !important;
+      display: grid !important;
+      grid-template-columns: 1fr 1fr !important;
+      gap: 0 !important;
+      min-height: 0 !important;
+      background: #020617 !important;
+    }
+    section[data-index="5"] .demo-pane {
+      position: relative !important;
+      min-width: 0 !important;
+      min-height: 0 !important;
+      border-top: 1px solid rgba(71, 85, 105, 0.35) !important;
+      background: #020617 !important;
+    }
+    section[data-index="5"] .demo-pane + .demo-pane {
+      border-left: 1px solid rgba(71, 85, 105, 0.35) !important;
+    }
+    section[data-index="5"] .demo-pane img,
+    section[data-index="5"] .demo-pane video {
+      width: 100% !important;
+      height: 100% !important;
+      object-fit: cover !important;
+      display: block !important;
+      background: #020617 !important;
+    }
+    section[data-index="5"] .demo-pane-label {
+      position: absolute !important;
+      left: 10px !important;
+      top: 10px !important;
+      z-index: 2 !important;
+      font-size: 11px !important;
+      font-weight: 700 !important;
+      letter-spacing: 0.03em !important;
+      color: #cbd5e1 !important;
+      background: rgba(15, 23, 42, 0.72) !important;
+      border: 1px solid rgba(148, 163, 184, 0.3) !important;
+      border-radius: 999px !important;
+      padding: 3px 9px !important;
+      backdrop-filter: blur(4px) !important;
+    }
+    .demo-zoom-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(2, 6, 23, 0.85);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 9998;
+      cursor: zoom-out;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s ease;
+    }
+    .demo-zoom-overlay.active {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    .demo-zoom-overlay img {
+      max-width: 94%;
+      max-height: 90%;
+      object-fit: contain;
+      border-radius: 12px;
+      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
+      background: #0f172a;
+      transform: scale(0.96);
+      transition: transform 0.2s ease;
+      will-change: transform;
+    }
+    .demo-zoom-overlay.active img {
+      transform: scale(1);
+    }
+    .demo-zoom-overlay .zoom-hint {
+      position: absolute;
+      bottom: 18px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 12px;
+      color: #cbd5e1;
+      background: rgba(15, 23, 42, 0.7);
+      border: 1px solid rgba(148, 163, 184, 0.3);
+      border-radius: 999px;
+      padding: 4px 10px;
+      letter-spacing: 0.02em;
+    }
+    .demo-zoom-target { cursor: zoom-in; }
+    .demo-zoom-target {
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+      will-change: transform;
+    }
+    .demo-zoom-target:hover {
+      transform: scale(1.03);
+      box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
+    }
+
+    
+    section[data-index="6"] .content-area {
+      display: flex !important;
+      flex-direction: row !important;
+      justify-content: flex-start !important;
+      align-items: stretch !important;
+      height: calc(100% - 80px) !important;
+      box-sizing: border-box !important;
+      padding: 16px 34px 18px !important;
+      gap: 20px !important;
+      overflow: hidden !important;
+    }
+    section[data-index="6"] .text-column {
+      flex: 0 0 52% !important;
+      max-width: 52% !important;
+      min-width: 52% !important;
+      padding-right: 6px !important;
+      display: flex !important;
+      flex-direction: column !important;
+      justify-content: flex-start !important;
+      overflow: hidden !important;
+    }
+    section[data-index="6"] .section-box {
+      margin-bottom: 10px !important;
+      padding: 14px 16px !important;
+      border-radius: 0 10px 10px 0 !important;
+    }
+    section[data-index="6"] .section-box::after {
+      display: none !important;
+      content: none !important;
+    }
+    section[data-index="6"] .section-box:last-child {
+      margin-bottom: 0 !important;
+    }
+    section[data-index="6"] .section-title {
+      font-size: 18px !important;
+      margin-bottom: 10px !important;
+      line-height: 1.28 !important;
+      text-decoration: none !important;
+      border-bottom: 0 !important;
+    }
+    section[data-index="6"] .section-title::after {
+      display: none !important;
+      content: none !important;
+    }
+    section[data-index="6"] .section-desc {
+      font-size: 14px !important;
+      line-height: 1.52 !important;
+      margin: 0 !important;
+    }
+    section[data-index="6"] .visual-column {
+      flex: 1 !important;
+      min-width: 0 !important;
+      max-width: 48% !important;
+      display: flex !important;
+      flex-direction: column !important;
+      justify-content: center !important;
+      padding: 14px !important;
+      border-radius: 16px !important;
+      overflow: hidden !important;
+    }
+    section[data-index="6"] .decision-grid {
+      display: grid !important;
+      grid-template-columns: 1fr 1fr !important;
+      gap: 12px !important;
+      height: 100% !important;
+      align-content: center !important;
+    }
+    section[data-index="6"] .decision-card {
+      padding: 12px !important;
+      border-radius: 12px !important;
+    }
+    section[data-index="6"] .card-label {
+      font-size: 15px !important;
+      line-height: 1.2 !important;
+      margin-bottom: 8px !important;
+    }
+    section[data-index="6"] .card-subtext {
+      font-size: 11px !important;
+      line-height: 1.35 !important;
+    }
+    section[data-index="6"] .card-icon-circle {
+      width: 74px !important;
+      height: 74px !important;
+      font-size: 26px !important;
+      margin-bottom: 10px !important;
+    }
+
+    
+    section[data-index="8"] .content-area {
+      display: grid !important;
+      grid-template-columns: 1fr 1fr !important;
+      grid-template-rows: repeat(2, minmax(0, 1fr)) !important;
+      gap: 12px !important;
+      height: calc(100% - 80px) !important;
+      box-sizing: border-box !important;
+      padding: 8px 30px 8px !important;
+      overflow: hidden !important;
+      align-content: start !important;
+      align-items: stretch !important;
+    }
+    section[data-index="8"] .trouble-card {
+      min-height: 0 !important;
+      margin: 0 !important;
+      border-radius: 16px !important;
+      overflow: hidden !important;
+      display: flex !important;
+      flex-direction: column !important;
+      height: 100% !important;
+    }
+    section[data-index="8"] .card-header {
+      padding: 8px 14px !important;
+      min-height: 48px !important;
+    }
+    section[data-index="8"] .card-title {
+      display: flex !important;
+      align-items: center !important;
+      gap: 8px !important;
+      font-size: 18px !important;
+      font-weight: 800 !important;
+      margin: 0 !important;
+    }
+    section[data-index="8"] .card-icon {
+      width: 34px !important;
+      height: 34px !important;
+      border-radius: 10px !important;
+      margin-right: 0 !important;
+      flex: 0 0 34px !important;
+      display: inline-flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+      font-size: 16px !important;
+    }
+    section[data-index="8"] .card-body {
+      padding: 10px 14px !important;
+      gap: 6px !important;
+      display: flex !important;
+      flex-direction: column !important;
+      align-items: stretch !important;
+      justify-content: space-between !important;
+      overflow: hidden !important;
+      min-width: 0 !important;
+      width: 100% !important;
+      box-sizing: border-box !important;
+    }
+    section[data-index="8"] .info-section {
+      padding: 10px 14px !important;
+      border-radius: 12px !important;
+      min-height: 0 !important;
+      display: flex !important;
+      flex-direction: column !important;
+      justify-content: center !important;
+      width: 100% !important;              /* 카드 기준 고정 폭 */
+      max-width: 100% !important;
+      box-sizing: border-box !important;
+      margin: 0 !important;
+      align-self: stretch !important;
+      min-width: 0 !important;
+      flex: 1 1 0 !important;
+    }
+    section[data-index="8"] .card-body > .info-section,
+    section[data-index="8"] .issue-section,
+    section[data-index="8"] .solution-section,
+    section[data-index="8"] .challenge-section,
+    section[data-index="8"] .strategy-section {
+      width: 100% !important;
+      max-width: 100% !important;
+    }
+    section[data-index="8"] .trouble-card:nth-of-type(3) .info-section,
+    section[data-index="8"] .trouble-card:nth-of-type(3) .issue-section,
+    section[data-index="8"] .trouble-card:nth-of-type(3) .solution-section {
+      width: 100% !important;
+      max-width: 100% !important;
+      margin-left: 0 !important;
+      margin-right: 0 !important;
+    }
+    section[data-index="8"] .content-text {
+      font-size: 14px !important;
+      line-height: 1.52 !important;
+      margin: 0 !important;
+      white-space: normal !important;
+      word-break: keep-all !important;      /* 글자 단위 쪼개짐 방지 */
+      overflow-wrap: anywhere !important;   /* 길면 자연 줄바꿈 */
+      line-break: strict !important;
+    }
+    section[data-index="8"] .content-text br {
+      display: block !important;
+    }
+    section[data-index="8"] .section-label {
+      font-size: 16px !important;
+      line-height: 1.2 !important;
+      margin-bottom: 8px !important;
+      font-weight: 800 !important;
+    }
+    section[data-index="8"] .flow-arrow {
+      margin: 0 !important;
+      font-size: 16px !important;
+      line-height: 1 !important;
+    }
+
+    
+    section[data-index="10"] .content-area {
+      justify-content: flex-start !important;
+      padding: 24px 52px 18px !important;
+      gap: 0 !important;
+      overflow: hidden !important;
+    }
+    section[data-index="10"] .summary-section {
+      margin-bottom: 22px !important;
+    }
+    section[data-index="10"] .section-title {
+      margin-bottom: 18px !important;
+    }
+    section[data-index="10"] .cards-container {
+      gap: 22px !important;
+    }
+    section[data-index="10"] .effect-card {
+      padding: 22px 18px !important;
+      min-height: 210px !important;
+    }
+    section[data-index="10"] .qna-section {
+      margin-top: 8px !important;
+      padding-top: 18px !important;
+    }
+    section[data-index="10"] .qna-title {
+      margin-top: 6px !important;
+      font-size: 58px !important;
+      line-height: 1.05 !important;
+    }
+    section[data-index="10"] .qna-subtitle {
+      margin-bottom: 14px !important;
+    }
+
+    section[data-index="9"] .content-area {
+      display: flex !important;
+      flex-direction: row !important;
+      justify-content: flex-start !important;
+      height: calc(100% - 80px) !important;
+      box-sizing: border-box !important;
+      padding: 20px 34px 18px !important;
+      gap: 18px !important;
+      align-items: stretch !important;
+      overflow: hidden !important;
+    }
+    section[data-index="9"] .text-column {
+      flex: 1.15 !important;
+      display: flex !important;
+      flex-direction: column !important;
+      padding-right: 10px !important;
+      justify-content: flex-start !important;
+      min-width: 0 !important;
+      max-width: 58% !important;
+    }
+    section[data-index="9"] .section-box {
+      padding: 20px 24px !important;
+      margin-bottom: 16px !important;
+      border-left-width: 4px !important;
+      border-radius: 0 10px 10px 0 !important;
+    }
+    section[data-index="9"] .section-box:last-child {
+      margin-bottom: 0 !important;
+    }
+    section[data-index="9"] .section-title {
+      font-size: 21px !important;
+      margin-bottom: 12px !important;
+      line-height: 1.2 !important;
+    }
+    section[data-index="9"] .section-desc {
+      font-size: 15px !important;
+      line-height: 1.52 !important;
+    }
+    section[data-index="9"] .visual-column {
+      flex: 0.85 !important;
+      display: flex !important;
+      flex-direction: column !important;
+      border-radius: 20px !important;
+      padding: 22px 18px !important;
+      min-width: 0 !important;
+      max-width: 42% !important;
+      overflow: hidden !important;
+      justify-content: space-between !important;
+    }
+    section[data-index="9"] .visual-card {
+      width: 94% !important;
+      padding: 18px !important;
+      margin-bottom: 0 !important;
+      border-radius: 14px !important;
+    }
+    section[data-index="9"] .visual-card.center {
+      transform: none !important;
+      border-color: #3b82f6 !important;
+      box-shadow: 0 0 16px rgba(59, 130, 246, 0.18) !important;
+    }
+    section[data-index="9"] .card-title {
+      font-size: 16px !important;
+      line-height: 1.25 !important;
+    }
+    section[data-index="9"] .card-content {
+      font-size: 13px !important;
+      line-height: 1.42 !important;
+      padding-left: 64px !important;
+    }
+    section[data-index="9"] .arrow-down {
+      margin: 4px 0 !important;
+      font-size: 20px !important;
+      line-height: 1 !important;
+    }
+
+    
+    section[data-index="99"] .content-area {
+      display: flex !important;
+      flex-direction: row !important;
+      justify-content: flex-start !important;
+      height: calc(100% - 80px) !important;
+      box-sizing: border-box !important;
+      padding: 20px 34px 18px !important;
+      gap: 18px !important;
+      align-items: stretch !important;
+      overflow: hidden !important;
+    }
+    section[data-index="99"] .text-column {
+      flex: 1.18 !important;
+      display: flex !important;
+      flex-direction: column !important;
+      padding-right: 10px !important;
+      justify-content: flex-start !important;
+      min-width: 0 !important;
+      max-width: 58% !important;
+    }
+    section[data-index="99"] .section-box {
+      padding: 20px 24px !important;
+      margin-bottom: 16px !important;
+      border-left-width: 4px !important;
+      border-radius: 0 10px 10px 0 !important;
+    }
+    section[data-index="99"] .section-box:last-child {
+      margin-bottom: 0 !important;
+    }
+    section[data-index="99"] .section-title {
+      font-size: 21px !important;
+      margin-bottom: 12px !important;
+      line-height: 1.2 !important;
+    }
+    section[data-index="99"] .section-desc {
+      font-size: 15px !important;
+      line-height: 1.52 !important;
+    }
+    section[data-index="99"] .visual-column {
+      flex: 0.92 !important;
+      display: flex !important;
+      flex-direction: column !important;
+      border-radius: 20px !important;
+      padding: 22px 18px !important;
+      min-width: 0 !important;
+      max-width: 42% !important;
+      overflow: hidden !important;
+      justify-content: space-between !important;
+    }
+    section[data-index="99"] .visual-card {
+      width: 94% !important;
+      padding: 18px !important;
+      margin-bottom: 0 !important;
+      border-radius: 14px !important;
+    }
+    section[data-index="99"] .visual-card.center {
+      transform: none !important;
+      border-color: #3b82f6 !important;
+      box-shadow: 0 0 16px rgba(59, 130, 246, 0.18) !important;
+    }
+    section[data-index="99"] .card-title {
+      font-size: 16px !important;
+      line-height: 1.25 !important;
+    }
+    section[data-index="99"] .card-content {
+      font-size: 13px !important;
+      line-height: 1.42 !important;
+      padding-left: 64px !important;
+    }
+    section[data-index="99"] .arrow-down {
+      margin: 4px 0 !important;
+      font-size: 50px !important;
+      line-height: 1 !important;
+      opacity: 0.7 !important;
+    }
+  </style>
+<style>
+        body {
+            font-family: 'Noto Sans KR', sans-serif;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #0f172a; 
+        }
+        .slide-container {
+            width: 1280px;
+            height: 720px;
+            position: relative;
+            background-color: #0f172a;
+            color: white;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+        }
+        
+        .bg-pattern {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            opacity: 0.05;
+            background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='1'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+            z-index: 0;
+            pointer-events: none;
+        }
+        
+        .decorative-circle {
+            position: absolute;
+            border-radius: 50%;
+            border: 1px solid rgba(59, 130, 246, 0.15);
+            z-index: 1;
+            pointer-events: none;
+        }
+        
+        .content-wrapper {
+            z-index: 10;
+            text-align: center;
+            max-width: 1000px;
+            position: relative;
+        }
+
+        .title-glow {
+            text-shadow: 0 0 30px rgba(59, 130, 246, 0.4);
+        }
+        
+        .etri-logo-text {
+            position: absolute;
+            top: 40px;
+            left: 50px;
+            font-weight: 900;
+            font-size: 24px;
+            color: #e2e8f0;
+            z-index: 20;
+            letter-spacing: 0.5px;
+            display: flex;
+            align-items: center;
+        }
+        
+        .bottom-bar {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 8px;
+            background-color: #3b82f6;
+            z-index: 20;
+        }
+        
+        .date-badge {
+            position: absolute;
+            top: 40px;
+            right: 50px;
+            background-color: rgba(255, 255, 255, 0.08);
+            padding: 8px 20px;
+            border-radius: 20px;
+            font-size: 14px;
+            color: #cbd5e1;
+            z-index: 20;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .tech-icon-circle {
+            width: 64px;
+            height: 64px;
+            border-radius: 50%;
+            background-color: rgba(30, 41, 59, 0.8);
+            border: 1px solid rgba(59, 130, 246, 0.3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 12px;
+            transition: all 0.3s ease;
+        }
+        
+        .tech-icon-group:hover .tech-icon-circle {
+            border-color: #3b82f6;
+            box-shadow: 0 0 15px rgba(59, 130, 246, 0.3);
+        }
+    </style>
+<style>
+        body {
+            font-family: 'Noto Sans KR', sans-serif;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #0f172a; 
+        }
+        .slide-container {
+            width: 1280px;
+            height: 720px;
+            position: relative;
+            background-color: #0f172a;
+            color: white;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        
+        
+        .header {
+            height: 80px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 40px;
+            border-bottom: 1px solid rgba(59, 130, 246, 0.3);
+            background: rgba(15, 23, 42, 0.95);
+            z-index: 10;
+        }
+        
+        .header-title {
+            font-size: 24px;
+            font-weight: 700;
+            color: white;
+            display: flex;
+            align-items: center;
+        }
+        
+        .header-title i {
+            margin-right: 12px;
+            color: #3b82f6;
+        }
+        
+        .etri-logo-small {
+            font-size: 16px;
+            font-weight: 700;
+            color: #94a3b8;
+        }
+        
+        
+        .content-area {
+            flex: 1;
+            display: flex;
+            padding: 40px;
+            position: relative;
+            z-index: 1;
+        }
+        
+        
+        .text-column {
+            flex: 1.2;
+            padding-right: 40px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+        
+        
+        .visual-column {
+            flex: 0.8;
+            background: rgba(30, 41, 59, 0.5);
+            border-radius: 20px;
+            border: 1px solid rgba(59, 130, 246, 0.2);
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .section-box {
+            background: rgba(30, 41, 59, 0.4);
+            border-left: 4px solid #3b82f6;
+            padding: 24px;
+            margin-bottom: 24px;
+            border-radius: 0 12px 12px 0;
+            transition: all 0.3s ease;
+        }
+        
+        .section-box:hover {
+            background: rgba(30, 41, 59, 0.7);
+            transform: translateX(5px);
+            border-left-color: #60a5fa;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        }
+        
+        .section-title {
+            font-size: 20px;
+            font-weight: 700;
+            margin-bottom: 12px;
+            color: #93c5fd;
+            display: flex;
+            align-items: center;
+        }
+        
+        .section-desc {
+            font-size: 16px;
+            line-height: 1.6;
+            color: #cbd5e1;
+            margin: 0;
+        }
+
+        .highlight-text {
+            color: #f87171; 
+            font-weight: 600;
+        }
+        
+        
+        .visual-card {
+            background: rgba(15, 23, 42, 0.8);
+            border-radius: 12px;
+            padding: 20px;
+            width: 85%;
+            margin-bottom: 20px;
+            border: 1px solid rgba(71, 85, 105, 0.5);
+            position: relative;
+        }
+        
+        .visual-card.center {
+            z-index: 2;
+            border-color: #3b82f6;
+            box-shadow: 0 0 20px rgba(59, 130, 246, 0.15);
+            transform: scale(1.05);
+        }
+        
+        .arrow-down {
+            color: #64748b;
+            font-size: 24px;
+            margin: 5px 0 25px 0;
+        }
+        
+        .icon-wrapper {
+            width: 48px;
+            height: 48px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 15px;
+            font-size: 20px;
+        }
+        
+        .icon-lock { background: rgba(239, 68, 68, 0.2); color: #f87171; }
+        .icon-camera { background: rgba(245, 158, 11, 0.2); color: #fbbf24; }
+        .icon-shield { background: rgba(59, 130, 246, 0.2); color: #60a5fa; }
+        
+        .card-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        
+        .card-title {
+            font-weight: 700;
+            color: white;
+            font-size: 16px;
+        }
+        
+        .card-content {
+            font-size: 14px;
+            color: #94a3b8;
+            padding-left: 63px;
+        }
+
+        
+        .bg-grid {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            
+            
+            background-color: #0f172a;
+            opacity: 0.1;
+            z-index: 0;
+            pointer-events: none;
+        }
+        
+        
+        .page-number {
+            position: absolute;
+            bottom: 20px;
+            right: 40px;
+            color: #64748b;
+            font-size: 14px;
+        }
+    </style>
+<style>
+        body {
+            font-family: 'Noto Sans KR', sans-serif;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #0f172a; 
+        }
+        .slide-container {
+            width: 1280px;
+            height: 720px;
+            position: relative;
+            background-color: #0f172a;
+            color: white;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        
+        .bg-grid {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            
+            background-color: #0f172a;
+            background-image: url('data:image/svg+xml,%3Csvg width="60" height="60" viewBox="0 0 60 60" xmlns="http://www.w3.org/2000/svg"%3E%3Cg fill="none" fill-rule="evenodd"%3E%3Cg fill="%233b82f6" fill-opacity="0.03"%3E%3Cpath d="M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z"/%3E%3C/g%3E%3C/g%3E%3C/svg%3E');
+            z-index: 0;
+            pointer-events: none;
+        }
+
+        
+        .header {
+            height: 80px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 40px;
+            border-bottom: 1px solid rgba(59, 130, 246, 0.3);
+            background: rgba(15, 23, 42, 0.95);
+            z-index: 10;
+        }
+        
+        .header-title {
+            font-size: 24px;
+            font-weight: 700;
+            color: white;
+            display: flex;
+            align-items: center;
+        }
+        
+        .header-title i {
+            margin-right: 12px;
+            color: #3b82f6;
+        }
+
+        .etri-logo-small {
+            font-size: 16px;
+            font-weight: 700;
+            color: #94a3b8;
+        }
+
+        
+        .content-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            padding: 40px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .slide-title-wrapper {
+            margin-bottom: 30px;
+            text-align: center;
+        }
+
+        .slide-main-title {
+            font-size: 32px;
+            font-weight: 800;
+            color: white;
+            margin-bottom: 10px;
+        }
+
+        .slide-subtitle {
+            font-size: 18px;
+            color: #94a3b8;
+            font-weight: 400;
+        }
+
+        
+        .columns-container {
+            display: flex;
+            justify-content: space-between;
+            gap: 30px;
+            height: 420px;
+        }
+
+        .column-card {
+            flex: 1;
+            background: rgba(30, 41, 59, 0.4);
+            border: 1px solid rgba(71, 85, 105, 0.5);
+            border-radius: 20px;
+            padding: 30px 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            position: relative;
+            transition: all 0.3s ease;
+            overflow: hidden;
+        }
+
+        .column-card:hover {
+            transform: translateY(-10px);
+            background: rgba(30, 41, 59, 0.7);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+        }
+
+        
+        .card-red .icon-circle { border-color: #ef4444; background: rgba(239, 68, 68, 0.1); color: #ef4444; }
+        .card-red:hover { border-color: #ef4444; box-shadow: 0 10px 30px rgba(239, 68, 68, 0.15); }
+        .card-red .card-title { color: #fca5a5; }
+        
+        .card-blue .icon-circle { border-color: #3b82f6; background: rgba(59, 130, 246, 0.1); color: #3b82f6; }
+        .card-blue:hover { border-color: #3b82f6; box-shadow: 0 10px 30px rgba(59, 130, 246, 0.15); }
+        .card-blue .card-title { color: #93c5fd; }
+        
+        .card-green .icon-circle { border-color: #10b981; background: rgba(16, 185, 129, 0.1); color: #10b981; }
+        .card-green:hover { border-color: #10b981; box-shadow: 0 10px 30px rgba(16, 185, 129, 0.15); }
+        .card-green .card-title { color: #6ee7b7; }
+
+        .icon-circle {
+            width: 90px;
+            height: 90px;
+            border-radius: 50%;
+            border: 2px solid;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 36px;
+            margin-bottom: 25px;
+            transition: all 0.3s ease;
+        }
+
+        .column-card:hover .icon-circle {
+            transform: scale(1.1) rotate(5deg);
+        }
+
+        .card-title {
+            font-size: 24px;
+            font-weight: 700;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .feature-list {
+            width: 100%;
+            padding: 0 15px;
+        }
+
+        .feature-item {
+            display: flex;
+            align-items: flex-start;
+            margin-bottom: 12px;
+            font-size: 16px;
+            color: #cbd5e1;
+            line-height: 1.5;
+        }
+
+        .feature-item i {
+            margin-top: 5px;
+            margin-right: 10px;
+            font-size: 12px;
+            opacity: 0.7;
+        }
+
+        .card-red .feature-item i { color: #ef4444; }
+        .card-blue .feature-item i { color: #3b82f6; }
+        .card-green .feature-item i { color: #10b981; }
+
+        
+        .summary-box {
+            margin-top: 30px;
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px dashed #475569;
+            border-radius: 10px;
+            padding: 15px;
+            text-align: center;
+            color: #94a3b8;
+            font-size: 15px;
+        }
+        
+        
+        .page-number {
+            position: absolute;
+            bottom: 20px;
+            right: 40px;
+            color: #64748b;
+            font-size: 14px;
+        }
+
+        
+        .decoration-line {
+            position: absolute;
+            height: 1px;
+            width: 100px;
+            background: #3b82f6;
+            opacity: 0.5;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 0;
+            display: none; 
+        }
+    </style>
+<style>
+        body {
+            font-family: 'Noto Sans KR', sans-serif;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #0f172a; 
+        }
+        .slide-container {
+            width: 1280px;
+            height: 720px;
+            position: relative;
+            background-color: #0f172a;
+            color: white;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        
+        .bg-grid {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background-image: url("data:image/svg+xml,%3Csvg width='40' height='40' viewBox='0 0 40 40' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0h40v40H0V0zm1 1h38v38H1V1z' fill='%233b82f6' fill-opacity='0.03' fill-rule='evenodd'/%3E%3C/svg%3E");
+            z-index: 0;
+            pointer-events: none;
+        }
+
+        
+        .header {
+            height: 80px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 40px;
+            border-bottom: 1px solid rgba(59, 130, 246, 0.3);
+            background: rgba(15, 23, 42, 0.95);
+            z-index: 10;
+        }
+        
+        .header-title {
+            font-size: 24px;
+            font-weight: 700;
+            color: white;
+            display: flex;
+            align-items: center;
+        }
+        
+        .header-title i {
+            margin-right: 12px;
+            color: #3b82f6;
+        }
+
+        .etri-logo-small {
+            font-size: 16px;
+            font-weight: 700;
+            color: #94a3b8;
+        }
+
+        
+        .content-area {
+            flex: 1;
+            display: flex;
+            padding: 30px 40px;
+            position: relative;
+            z-index: 1;
+            gap: 30px;
+        }
+
+        
+        .desc-panel {
+            flex: 0 0 320px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            overflow-y: auto;
+            padding-right: 5px;
+        }
+
+        .component-card {
+            background: rgba(30, 41, 59, 0.5);
+            border-left: 3px solid;
+            padding: 15px;
+            border-radius: 0 8px 8px 0;
+            transition: all 0.2s ease;
+        }
+
+        .component-card:hover {
+            transform: translateX(5px);
+            background: rgba(30, 41, 59, 0.8);
+        }
+
+        
+        .comp-edge { border-color: #60a5fa; } 
+        .comp-ai { border-color: #a78bfa; } 
+        .comp-gateway { border-color: #34d399; } 
+        .comp-web { border-color: #fbbf24; } 
+        .comp-ext { border-color: #94a3b8; } 
+
+        .card-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 8px;
+            font-weight: 700;
+            font-size: 16px;
+        }
+        
+        .comp-edge .card-header { color: #93c5fd; }
+        .comp-ai .card-header { color: #c4b5fd; }
+        .comp-gateway .card-header { color: #6ee7b7; }
+        .comp-web .card-header { color: #fcd34d; }
+        .comp-ext .card-header { color: #cbd5e1; }
+
+        .card-icon {
+            width: 24px;
+            text-align: center;
+            margin-right: 10px;
+        }
+
+        .card-desc {
+            font-size: 13px;
+            color: #cbd5e1;
+            line-height: 1.5;
+            margin: 0;
+        }
+
+        .tech-tag {
+            display: inline-block;
+            font-size: 10px;
+            padding: 2px 6px;
+            border-radius: 4px;
+            background: rgba(255, 255, 255, 0.1);
+            margin-top: 8px;
+            margin-right: 4px;
+            color: #e2e8f0;
+        }
+
+        
+        .diagram-panel {
+            flex: 1;
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid rgba(59, 130, 246, 0.2);
+            border-radius: 12px;
+            position: relative;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+            overflow: hidden;
+        }
+
+        .diagram-img {
+            max-width: 100%;
+            max-height: 100%;
+            border-radius: 8px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+        }
+
+        
+        .page-number {
+            position: absolute;
+            bottom: 20px;
+            right: 40px;
+            color: #64748b;
+            font-size: 14px;
+        }
+
+        
+        .flow-line {
+            position: absolute;
+            height: 2px;
+            background: rgba(59, 130, 246, 0.5);
+            z-index: 5;
+        }
+        
+        
+        .legend-box {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            background: rgba(15, 23, 42, 0.9);
+            padding: 10px 15px;
+            border-radius: 8px;
+            border: 1px solid rgba(71, 85, 105, 0.5);
+            display: flex;
+            gap: 15px;
+            font-size: 12px;
+            color: #cbd5e1;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+        }
+        
+        .legend-color {
+            width: 12px;
+            height: 12px;
+            margin-right: 6px;
+            border-radius: 2px;
+        }
+        
+        .boundary-label {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px dashed #ef4444;
+            color: #fca5a5;
+            padding: 5px 10px;
+            font-size: 12px;
+            border-radius: 4px;
+            font-weight: 600;
+        }
+
+        
+        .desc-panel::-webkit-scrollbar {
+            width: 4px;
+        }
+        .desc-panel::-webkit-scrollbar-track {
+            background: rgba(30, 41, 59, 0.3);
+        }
+        .desc-panel::-webkit-scrollbar-thumb {
+            background: rgba(59, 130, 246, 0.3);
+            border-radius: 4px;
+        }
+    </style>
+<style>
+        body {
+            font-family: 'Noto Sans KR', sans-serif;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #0f172a; 
+        }
+        .slide-container {
+            width: 1280px;
+            height: 720px;
+            position: relative;
+            background-color: #0f172a;
+            color: white;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        
+        .bg-grid {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background-image: url("data:image/svg+xml,%3Csvg width='40' height='40' viewBox='0 0 40 40' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0h40v40H0V0zm1 1h38v38H1V1z' fill='%233b82f6' fill-opacity='0.03' fill-rule='evenodd'%3E%3C/svg%3E");
+            z-index: 0;
+            pointer-events: none;
+        }
+
+        
+        .header {
+            height: 80px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 40px;
+            border-bottom: 1px solid rgba(59, 130, 246, 0.3);
+            background: rgba(15, 23, 42, 0.95);
+            z-index: 10;
+        }
+        
+        .header-title {
+            font-size: 24px;
+            font-weight: 700;
+            color: white;
+            display: flex;
+            align-items: center;
+        }
+        
+        .header-title i {
+            margin-right: 12px;
+            color: #3b82f6;
+        }
+
+        .etri-logo-small {
+            font-size: 16px;
+            font-weight: 700;
+            color: #94a3b8;
+        }
+
+        
+        .content-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            padding: 30px 40px;
+            position: relative;
+            z-index: 1;
+        }
+
+        
+        .status-section {
+            margin-bottom: 30px;
+        }
+
+        .section-header {
+            font-size: 18px;
+            font-weight: 700;
+            color: #93c5fd;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+        }
+
+        .section-header::before {
+            content: '';
+            display: block;
+            width: 4px;
+            height: 18px;
+            background-color: #3b82f6;
+            margin-right: 10px;
+            border-radius: 2px;
+        }
+
+        .status-grid {
+            display: flex;
+            gap: 15px;
+            justify-content: space-between;
+        }
+
+        .status-card {
+            flex: 1;
+            background: rgba(30, 41, 59, 0.5);
+            border-radius: 10px;
+            padding: 12px 15px;
+            display: flex;
+            flex-direction: column;
+            border: 1px solid rgba(71, 85, 105, 0.5);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .status-card.danger { border-color: #ef4444; background: rgba(239, 68, 68, 0.1); }
+        .status-card.safe { border-color: #10b981; background: rgba(16, 185, 129, 0.1); }
+        .status-card.conn { border-color: #3b82f6; background: rgba(59, 130, 246, 0.1); }
+        .status-card.mode { border-color: #f59e0b; background: rgba(245, 158, 11, 0.1); }
+
+        .status-label {
+            font-size: 14px;
+            font-weight: 800;
+            margin-bottom: 5px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .danger .status-label { color: #fca5a5; }
+        .safe .status-label { color: #6ee7b7; }
+        .conn .status-label { color: #93c5fd; }
+        .mode .status-label { color: #fcd34d; }
+
+        .status-desc {
+            font-size: 12px;
+            color: #cbd5e1;
+            line-height: 1.4;
+        }
+
+        
+        .flow-section {
+            flex: 1;
+            background: rgba(15, 23, 42, 0.4);
+            border-radius: 16px;
+            border: 1px dashed rgba(59, 130, 246, 0.3);
+            padding: 20px;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .process-steps {
+            display: flex;
+            align-items: center;
+            width: 100%;
+            justify-content: space-between;
+            position: relative;
+        }
+
+        
+        .process-line {
+            position: absolute;
+            top: 50%;
+            left: 50px;
+            right: 50px;
+            height: 2px;
+            background-color: #334155;
+            z-index: 0;
+            transform: translateY(-50%);
+        }
+
+        
+        .process-line-active {
+            position: absolute;
+            top: 50%;
+            left: 50px;
+            width: 70%;
+            height: 2px;
+            background-color: #3b82f6;
+            z-index: 0;
+            transform: translateY(-50%);
+            box-shadow: 0 0 10px rgba(59, 130, 246, 0.5);
+        }
+
+        .step-item {
+            z-index: 2;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 220px;
+            text-align: center;
+        }
+
+        .step-circle {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: #1e293b;
+            border: 2px solid #3b82f6;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            color: #3b82f6;
+            margin-bottom: 15px;
+            box-shadow: 0 0 20px rgba(59, 130, 246, 0.3);
+            transition: all 0.3s ease;
+        }
+
+        .step-item:last-child .step-circle {
+            border-color: #10b981;
+            color: #10b981;
+            box-shadow: 0 0 20px rgba(16, 185, 129, 0.3);
+        }
+
+        .step-item:hover .step-circle {
+            transform: scale(1.1);
+        }
+
+        .step-title {
+            font-size: 16px;
+            font-weight: 700;
+            color: white;
+            margin-bottom: 8px;
+        }
+
+        .step-desc {
+            font-size: 13px;
+            color: #94a3b8;
+            background: rgba(30, 41, 59, 0.8);
+            padding: 8px 12px;
+            border-radius: 6px;
+            width: 100%;
+        }
+
+        
+        .arrow-icon {
+            color: #475569;
+            font-size: 20px;
+            z-index: 1;
+        }
+
+        
+        .page-number {
+            position: absolute;
+            bottom: 20px;
+            right: 40px;
+            color: #64748b;
+            font-size: 14px;
+        }
+    </style>
+<style>
+        body {
+            font-family: 'Noto Sans KR', sans-serif;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #0f172a; 
+        }
+        .slide-container {
+            width: 1280px;
+            height: 720px;
+            position: relative;
+            background-color: #0f172a;
+            color: white;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        
+        .bg-grid {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            
+            background-color: #0f172a;
+            background-image: url('data:image/svg+xml,%3Csvg width="60" height="60" viewBox="0 0 60 60" xmlns="http://www.w3.org/2000/svg"%3E%3Cg fill="none" fill-rule="evenodd"%3E%3Cg fill="%233b82f6" fill-opacity="0.03"%3E%3Cpath d="M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z"/%3E%3C/g%3E%3C/g%3E%3C/svg%3E');
+            z-index: 0;
+            pointer-events: none;
+        }
+
+        
+        .header {
+            height: 80px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 40px;
+            border-bottom: 1px solid rgba(59, 130, 246, 0.3);
+            background: rgba(15, 23, 42, 0.95);
+            z-index: 10;
+        }
+        
+        .header-title {
+            font-size: 24px;
+            font-weight: 700;
+            color: white;
+            display: flex;
+            align-items: center;
+        }
+        
+        .header-title i {
+            margin-right: 12px;
+            color: #3b82f6;
+        }
+
+        .etri-logo-small {
+            font-size: 16px;
+            font-weight: 700;
+            color: #94a3b8;
+        }
+
+        
+        .content-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            padding: 20px 40px 40px 40px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .slide-title-wrapper {
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .slide-main-title {
+            font-size: 32px;
+            font-weight: 800;
+            color: white;
+            margin-bottom: 5px;
+        }
+
+        .slide-subtitle {
+            font-size: 16px;
+            color: #94a3b8;
+            font-weight: 400;
+        }
+
+        
+        .columns-container {
+            display: flex;
+            justify-content: space-between;
+            gap: 20px;
+            height: 240px; 
+            margin-bottom: 20px;
+        }
+
+        .column-card {
+            flex: 1;
+            background: rgba(30, 41, 59, 0.4);
+            border: 1px solid rgba(71, 85, 105, 0.5);
+            border-radius: 15px;
+            padding: 20px 15px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            position: relative;
+            transition: all 0.3s ease;
+            overflow: hidden;
+        }
+
+        
+        .card-blue .icon-circle { border-color: #3b82f6; background: rgba(59, 130, 246, 0.1); color: #3b82f6; }
+        .card-blue .card-title { color: #93c5fd; }
+        .card-blue .feature-item i { color: #3b82f6; }
+        
+        .card-green .icon-circle { border-color: #10b981; background: rgba(16, 185, 129, 0.1); color: #10b981; }
+        .card-green .card-title { color: #6ee7b7; }
+        .card-green .feature-item i { color: #10b981; }
+
+        .card-purple .icon-circle { border-color: #8b5cf6; background: rgba(139, 92, 246, 0.1); color: #8b5cf6; }
+        .card-purple .card-title { color: #c4b5fd; }
+        .card-purple .feature-item i { color: #8b5cf6; }
+
+        .icon-circle {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            border: 2px solid;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            margin-bottom: 10px;
+            transition: all 0.3s ease;
+        }
+
+        .card-title {
+            font-size: 18px;
+            font-weight: 700;
+            margin-bottom: 10px;
+            text-align: center;
+        }
+
+        .feature-list {
+            width: 100%;
+            padding: 0 5px;
+        }
+
+        .feature-item {
+            display: flex;
+            align-items: flex-start;
+            margin-bottom: 8px;
+            font-size: 13px;
+            color: #cbd5e1;
+            line-height: 1.4;
+        }
+
+        .feature-item i {
+            margin-top: 4px;
+            margin-right: 8px;
+            font-size: 12px;
+            flex-shrink: 0;
+        }
+        
+        .feature-strong {
+            color: white;
+            font-weight: 600;
+            display: block;
+            margin-bottom: 1px;
+        }
+
+        
+        .demo-section {
+            flex: 1;
+            background: rgba(15, 23, 42, 0.8);
+            border: 1px solid rgba(59, 130, 246, 0.3);
+            border-radius: 12px;
+            padding: 0;
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .demo-header {
+            background: rgba(30, 41, 59, 0.8);
+            padding: 8px 15px;
+            border-bottom: 1px solid rgba(71, 85, 105, 0.5);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .demo-title {
+            font-size: 14px;
+            font-weight: 700;
+            color: #94a3b8;
+            display: flex;
+            align-items: center;
+        }
+
+        .demo-badge {
+            background: #ef4444;
+            color: white;
+            font-size: 10px;
+            padding: 2px 6px;
+            border-radius: 4px;
+            margin-left: 8px;
+            font-weight: bold;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.6; }
+            100% { opacity: 1; }
+        }
+
+        .demo-image-container {
+            flex: 1;
+            overflow: hidden;
+            position: relative;
+            background: #000;
+        }
+        
+        .demo-image {
+            width: 100%;
+            height: 100%;
+            object-fit: contain; 
+        }
+        
+        
+        .page-number {
+            position: absolute;
+            bottom: 20px;
+            right: 40px;
+            color: #64748b;
+            font-size: 14px;
+        }
+    </style>
+<style>
+        body {
+            font-family: 'Noto Sans KR', sans-serif;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #0f172a; 
+        }
+        .slide-container {
+            width: 1280px;
+            height: 720px;
+            position: relative;
+            background-color: #0f172a;
+            color: white;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        
+        
+        .header {
+            height: 80px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 40px;
+            border-bottom: 1px solid rgba(59, 130, 246, 0.3);
+            background: rgba(15, 23, 42, 0.95);
+            z-index: 10;
+        }
+        
+        .header-title {
+            font-size: 24px;
+            font-weight: 700;
+            color: white;
+            display: flex;
+            align-items: center;
+        }
+        
+        .header-title i {
+            margin-right: 12px;
+            color: #3b82f6;
+        }
+        
+        .etri-logo-small {
+            font-size: 16px;
+            font-weight: 700;
+            color: #94a3b8;
+        }
+        
+        
+        .content-area {
+            flex: 1;
+            display: flex;
+            padding: 30px 40px; 
+            position: relative;
+            z-index: 1;
+            gap: 40px;
+        }
+        
+        
+        .text-column {
+            flex: 1.1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+        
+        
+        .visual-column {
+            flex: 0.9;
+            background: rgba(30, 41, 59, 0.5);
+            border-radius: 20px;
+            border: 1px solid rgba(59, 130, 246, 0.2);
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .section-box {
+            background: rgba(30, 41, 59, 0.4);
+            border-left: 4px solid #3b82f6;
+            padding: 18px 24px; 
+            margin-bottom: 16px; 
+            border-radius: 0 12px 12px 0;
+            transition: all 0.3s ease;
+        }
+        
+        .section-box:last-child {
+            margin-bottom: 0;
+        }
+        
+        .section-box:hover {
+            background: rgba(30, 41, 59, 0.7);
+            transform: translateX(5px);
+            border-left-color: #60a5fa;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        }
+        
+        .section-title {
+            font-size: 18px;
+            font-weight: 700;
+            margin-bottom: 6px;
+            color: #93c5fd;
+            display: flex;
+            align-items: center;
+        }
+        
+        .section-desc {
+            font-size: 14px;
+            line-height: 1.5;
+            color: #cbd5e1;
+            margin: 0;
+        }
+
+        .highlight-text {
+            color: #f87171; 
+            font-weight: 600;
+        }
+        
+        
+        .decision-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            grid-template-rows: 1fr 1fr;
+            gap: 20px;
+            width: 100%;
+            height: 100%;
+            padding: 10px;
+        }
+        
+        .decision-card {
+            background: rgba(15, 23, 42, 0.8);
+            border-radius: 16px;
+            border: 1px solid rgba(59, 130, 246, 0.2);
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            position: relative;
+            transition: transform 0.3s ease;
+        }
+        
+        .decision-card:hover {
+            transform: translateY(-5px);
+            border-color: #60a5fa;
+            box-shadow: 0 10px 25px rgba(59, 130, 246, 0.1);
+        }
+
+        .card-icon-circle {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: rgba(30, 41, 59, 1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            margin-bottom: 15px;
+            border: 2px solid;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        
+        .card-label {
+            font-size: 16px;
+            font-weight: 700;
+            color: white;
+            margin-bottom: 8px;
+        }
+        
+        .card-subtext {
+            font-size: 13px;
+            color: #94a3b8;
+            line-height: 1.4;
+        }
+
+        
+        .theme-blue .card-icon-circle { border-color: #3b82f6; color: #3b82f6; }
+        .theme-green .card-icon-circle { border-color: #10b981; color: #10b981; }
+        .theme-purple .card-icon-circle { border-color: #a855f7; color: #a855f7; }
+        .theme-orange .card-icon-circle { border-color: #f59e0b; color: #f59e0b; }
+
+        
+        .bg-grid {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background-color: #0f172a;
+            opacity: 0.1;
+            z-index: 0;
+            pointer-events: none;
+        }
+        
+        .page-number {
+            position: absolute;
+            bottom: 20px;
+            right: 40px;
+            color: #64748b;
+            font-size: 14px;
+        }
+    </style>
+<style>
+        body {
+            font-family: 'Noto Sans KR', sans-serif;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #0f172a; 
+        }
+        .slide-container {
+            width: 1280px;
+            height: 720px;
+            position: relative;
+            background-color: #0f172a;
+            color: white;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        
+        .bg-grid {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background-image: url('data:image/svg+xml,%3Csvg width="60" height="60" viewBox="0 0 60 60" xmlns="http://www.w3.org/2000/svg"%3E%3Cg fill="none" fill-rule="evenodd"%3E%3Cg fill="%233b82f6" fill-opacity="0.03"%3E%3Cpath d="M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z"/%3E%3C/g%3E%3C/g%3E%3C/svg%3E');
+            background-size: 60px 60px;
+            z-index: 0;
+            pointer-events: none;
+        }
+
+        
+        .header {
+            height: 80px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 40px;
+            border-bottom: 1px solid rgba(59, 130, 246, 0.3);
+            background: rgba(15, 23, 42, 0.95);
+            z-index: 10;
+        }
+        
+        .header-title {
+            font-size: 24px;
+            font-weight: 700;
+            color: white;
+            display: flex;
+            align-items: center;
+        }
+        
+        .header-title i {
+            margin-right: 12px;
+            color: #3b82f6;
+        }
+
+        .etri-logo-small {
+            font-size: 16px;
+            font-weight: 700;
+            color: #94a3b8;
+        }
+
+        
+        .content-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            padding: 40px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .slide-title-wrapper {
+            margin-bottom: 30px;
+            text-align: center;
+        }
+
+        .slide-main-title {
+            font-size: 32px;
+            font-weight: 800;
+            color: white;
+            margin-bottom: 10px;
+        }
+
+        .slide-subtitle {
+            font-size: 18px;
+            color: #94a3b8;
+            font-weight: 400;
+        }
+
+        
+        .columns-container {
+            display: flex;
+            justify-content: space-between;
+            gap: 30px;
+            height: 420px;
+        }
+
+        .column-card {
+            flex: 1;
+            background: rgba(30, 41, 59, 0.4);
+            border: 1px solid rgba(71, 85, 105, 0.5);
+            border-radius: 20px;
+            padding: 30px 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            position: relative;
+            transition: all 0.3s ease;
+            overflow: hidden;
+        }
+
+        .column-card:hover {
+            transform: translateY(-10px);
+            background: rgba(30, 41, 59, 0.7);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+        }
+
+        
+        .card-red .icon-circle { border-color: #ef4444; background: rgba(239, 68, 68, 0.1); color: #ef4444; }
+        .card-red:hover { border-color: #ef4444; box-shadow: 0 10px 30px rgba(239, 68, 68, 0.15); }
+        .card-red .card-title { color: #fca5a5; }
+        
+        .card-blue .icon-circle { border-color: #3b82f6; background: rgba(59, 130, 246, 0.1); color: #3b82f6; }
+        .card-blue:hover { border-color: #3b82f6; box-shadow: 0 10px 30px rgba(59, 130, 246, 0.15); }
+        .card-blue .card-title { color: #93c5fd; }
+        
+        .card-green .icon-circle { border-color: #10b981; background: rgba(16, 185, 129, 0.1); color: #10b981; }
+        .card-green:hover { border-color: #10b981; box-shadow: 0 10px 30px rgba(16, 185, 129, 0.15); }
+        .card-green .card-title { color: #6ee7b7; }
+
+        .icon-circle {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            border: 2px solid;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 32px;
+            margin-bottom: 20px;
+            transition: all 0.3s ease;
+        }
+
+        .column-card:hover .icon-circle {
+            transform: scale(1.1) rotate(5deg);
+        }
+
+        .card-title {
+            font-size: 22px;
+            font-weight: 700;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+
+        
+        .file-structure {
+            width: 100%;
+            padding: 0 10px;
+            font-family: 'JetBrains Mono', 'Nanum Gothic Coding', monospace;
+            font-size: 13px;
+            color: #cbd5e1;
+        }
+
+        .folder-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 8px;
+            color: #e2e8f0;
+            font-weight: 600;
+        }
+
+        .folder-item i {
+            color: #f59e0b;
+            margin-right: 8px;
+        }
+
+        .file-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 6px;
+            padding-left: 24px;
+            position: relative;
+        }
+        
+        .file-item::before {
+            content: '';
+            position: absolute;
+            left: 10px;
+            top: -6px;
+            bottom: 50%;
+            width: 1px;
+            background-color: #475569;
+        }
+        
+        .file-item::after {
+            content: '';
+            position: absolute;
+            left: 10px;
+            top: 50%;
+            width: 10px;
+            height: 1px;
+            background-color: #475569;
+        }
+
+        .file-item i {
+            margin-right: 8px;
+            font-size: 12px;
+            width: 14px;
+            text-align: center;
+        }
+
+        .py-icon { color: #3b82f6; }
+        .cs-icon { color: #10b981; }
+        .tsx-icon { color: #60a5fa; }
+
+        .file-desc {
+            font-size: 11px;
+            color: #94a3b8;
+            margin-left: auto;
+            font-family: 'Noto Sans KR', sans-serif;
+            background: rgba(15, 23, 42, 0.5);
+            padding: 2px 6px;
+            border-radius: 4px;
+        }
+
+        
+        .summary-box {
+            margin-top: 30px;
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px dashed #475569;
+            border-radius: 10px;
+            padding: 15px;
+            text-align: center;
+            color: #94a3b8;
+            font-size: 15px;
+        }
+        
+        
+        .page-number {
+            position: absolute;
+            bottom: 20px;
+            right: 40px;
+            color: #64748b;
+            font-size: 14px;
+        }
+    </style>
+<style>
+        body {
+            font-family: 'Noto Sans KR', sans-serif;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #0f172a; 
+        }
+        .slide-container {
+            width: 1280px;
+            height: 720px;
+            position: relative;
+            background-color: #0f172a;
+            color: white;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        
+        .bg-grid {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background-image: url("data:image/svg+xml,%3Csvg width='40' height='40' viewBox='0 0 40 40' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0h40v40H0V0zm1 1h38v38H1V1z' fill='%233b82f6' fill-opacity='0.03' fill-rule='evenodd'%3E%3C/svg%3E");
+            z-index: 0;
+            pointer-events: none;
+        }
+
+        
+        .header {
+            height: 80px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 40px;
+            border-bottom: 1px solid rgba(59, 130, 246, 0.3);
+            background: rgba(15, 23, 42, 0.95);
+            z-index: 10;
+        }
+        
+        .header-title {
+            font-size: 24px;
+            font-weight: 700;
+            color: white;
+            display: flex;
+            align-items: center;
+        }
+        
+        .header-title i {
+            margin-right: 12px;
+            color: #3b82f6;
+        }
+
+        .etri-logo-small {
+            font-size: 16px;
+            font-weight: 700;
+            color: #94a3b8;
+        }
+
+        
+        .content-area {
+            flex: 1;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            grid-template-rows: 1fr 1fr;
+            gap: 20px;
+            padding: 30px 40px 40px 40px;
+            position: relative;
+            z-index: 1;
+        }
+
+        
+        .trouble-card {
+            background: rgba(30, 41, 59, 0.4);
+            border-radius: 16px;
+            border: 1px solid rgba(71, 85, 105, 0.3);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        .trouble-card:hover {
+            background: rgba(30, 41, 59, 0.7);
+            border-color: #3b82f6;
+            transform: translateY(-3px);
+            box-shadow: 0 8px 20px -5px rgba(0, 0, 0, 0.3);
+        }
+
+        
+        .optimization-card {
+            background: rgba(16, 185, 129, 0.05);
+            border-color: rgba(16, 185, 129, 0.2);
+        }
+        .optimization-card:hover {
+            border-color: #34d399;
+            background: rgba(16, 185, 129, 0.1);
+        }
+
+        
+        .card-header {
+            background: rgba(15, 23, 42, 0.6);
+            padding: 12px 20px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .card-title {
+            font-size: 16px;
+            font-weight: 700;
+            color: white;
+            display: flex;
+            align-items: center;
+        }
+
+        .card-icon {
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            background: rgba(59, 130, 246, 0.1);
+            color: #60a5fa;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 10px;
+            font-size: 14px;
+        }
+        
+        .opt-icon {
+            background: rgba(16, 185, 129, 0.1);
+            color: #34d399;
+        }
+
+        .card-tag {
+            font-size: 10px;
+            padding: 3px 8px;
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.1);
+            color: #cbd5e1;
+            font-weight: 500;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        
+        .card-body {
+            flex: 1;
+            padding: 15px 20px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        
+        .info-section {
+            border-radius: 10px;
+            padding: 10px 12px;
+            margin-bottom: 8px;
+        }
+
+        
+        .issue-section {
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.15);
+        }
+        
+        
+        .challenge-section {
+            background: rgba(245, 158, 11, 0.1);
+            border: 1px solid rgba(245, 158, 11, 0.15);
+        }
+
+        .section-label {
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 4px;
+            display: flex;
+            align-items: center;
+        }
+
+        .label-issue { color: #fca5a5; }
+        .label-challenge { color: #fcd34d; }
+        .label-solution { color: #86efac; }
+        .label-strategy { color: #6ee7b7; }
+
+        .content-text {
+            font-size: 13px;
+            color: #e2e8f0;
+            line-height: 1.5;
+            margin: 0;
+        }
+
+        
+        .flow-arrow {
+            text-align: center;
+            color: #64748b;
+            font-size: 14px;
+            margin: -5px 0 5px 0;
+        }
+
+        
+        .solution-section {
+            background: rgba(16, 185, 129, 0.1);
+            border: 1px solid rgba(16, 185, 129, 0.15);
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        
+        .strategy-section {
+            background: rgba(59, 130, 246, 0.1);
+            border: 1px solid rgba(59, 130, 246, 0.15);
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .highlight-text {
+            color: #60a5fa;
+            font-weight: 700;
+        }
+        .highlight-opt {
+            color: #34d399;
+            font-weight: 700;
+        }
+
+        
+        .page-number {
+            position: absolute;
+            bottom: 20px;
+            right: 40px;
+            color: #64748b;
+            font-size: 14px;
+        }
+    </style>
+<style>
+        body {
+            font-family: 'Noto Sans KR', sans-serif;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #0f172a; 
+        }
+        .slide-container {
+            width: 1280px;
+            height: 720px;
+            position: relative;
+            background-color: #0f172a;
+            color: white;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        
+        
+        .header {
+            height: 80px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 40px;
+            border-bottom: 1px solid rgba(59, 130, 246, 0.3);
+            background: rgba(15, 23, 42, 0.95);
+            z-index: 10;
+        }
+        
+        .header-title {
+            font-size: 24px;
+            font-weight: 700;
+            color: white;
+            display: flex;
+            align-items: center;
+        }
+        
+        .header-title i {
+            margin-right: 12px;
+            color: #3b82f6;
+        }
+        
+        .etri-logo-small {
+            font-size: 16px;
+            font-weight: 700;
+            color: #94a3b8;
+        }
+        
+        
+        .content-area {
+            flex: 1;
+            display: flex;
+            padding: 40px;
+            position: relative;
+            z-index: 1;
+        }
+        
+        
+        .text-column {
+            flex: 1.2;
+            padding-right: 40px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+        
+        
+        .visual-column {
+            flex: 0.8;
+            background: rgba(30, 41, 59, 0.5);
+            border-radius: 20px;
+            border: 1px solid rgba(59, 130, 246, 0.2);
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .section-box {
+            background: rgba(30, 41, 59, 0.4);
+            border-left: 4px solid #3b82f6;
+            padding: 24px;
+            margin-bottom: 24px;
+            border-radius: 0 12px 12px 0;
+            transition: all 0.3s ease;
+        }
+        
+        .section-box:hover {
+            background: rgba(30, 41, 59, 0.7);
+            transform: translateX(5px);
+            border-left-color: #60a5fa;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        }
+        
+        .section-title {
+            font-size: 20px;
+            font-weight: 700;
+            margin-bottom: 12px;
+            color: #93c5fd;
+            display: flex;
+            align-items: center;
+        }
+        
+        .section-desc {
+            font-size: 16px;
+            line-height: 1.6;
+            color: #cbd5e1;
+            margin: 0;
+        }
+
+        .highlight-text {
+            color: #60a5fa; 
+            font-weight: 600;
+        }
+        
+        
+        .visual-card {
+            background: rgba(15, 23, 42, 0.8);
+            border-radius: 12px;
+            padding: 20px;
+            width: 85%;
+            margin-bottom: 20px;
+            border: 1px solid rgba(71, 85, 105, 0.5);
+            position: relative;
+        }
+        
+        .visual-card.center {
+            z-index: 2;
+            border-color: #3b82f6;
+            box-shadow: 0 0 20px rgba(59, 130, 246, 0.15);
+            transform: scale(1.05);
+        }
+        
+        .arrow-down {
+            color: #64748b;
+            font-size: 24px;
+            margin: 5px 0 25px 0;
+        }
+        
+        .icon-wrapper {
+            width: 48px;
+            height: 48px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 15px;
+            font-size: 20px;
+        }
+        
+        .icon-expand { background: rgba(59, 130, 246, 0.2); color: #60a5fa; }
+        .icon-industry { background: rgba(16, 185, 129, 0.2); color: #34d399; }
+        .icon-connect { background: rgba(245, 158, 11, 0.2); color: #fbbf24; }
+        
+        .card-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        
+        .card-title {
+            font-weight: 700;
+            color: white;
+            font-size: 16px;
+        }
+        
+        .card-content {
+            font-size: 14px;
+            color: #94a3b8;
+            padding-left: 63px;
+        }
+
+        
+        .bg-grid {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            
+            background-color: #0f172a;
+            opacity: 0.1;
+            z-index: 0;
+            pointer-events: none;
+        }
+        
+        .glowing-orb {
+            position: absolute;
+            width: 400px;
+            height: 400px;
+            border-radius: 50%;
+            
+            background-color: rgba(16, 185, 129, 0.05);
+            bottom: -10%;
+            left: -10%;
+            z-index: 0;
+            pointer-events: none;
+        }
+
+        
+        .page-number {
+            position: absolute;
+            bottom: 20px;
+            right: 40px;
+            color: #64748b;
+            font-size: 14px;
+        }
+    </style>
+<style>
+        body {
+            font-family: 'Noto Sans KR', sans-serif;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #0f172a; 
+        }
+        .slide-container {
+            width: 1280px;
+            height: 720px;
+            position: relative;
+            background-color: #0f172a;
+            color: white;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        
+        .bg-pattern {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%233b82f6' fill-opacity='0.05'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+            z-index: 0;
+            pointer-events: none;
+        }
+
+        
+        .header {
+            height: 80px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 40px;
+            border-bottom: 1px solid rgba(59, 130, 246, 0.3);
+            background: rgba(15, 23, 42, 0.95);
+            z-index: 10;
+        }
+        
+        .header-title {
+            font-size: 24px;
+            font-weight: 700;
+            color: white;
+            display: flex;
+            align-items: center;
+        }
+        
+        .header-title i {
+            margin-right: 12px;
+            color: #3b82f6;
+        }
+
+        .etri-logo-small {
+            font-size: 16px;
+            font-weight: 700;
+            color: #94a3b8;
+        }
+
+        
+        .content-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            padding: 40px 60px;
+            position: relative;
+            z-index: 1;
+            justify-content: center;
+        }
+
+        
+        .summary-section {
+            display: flex;
+            flex-direction: column;
+            margin-bottom: 40px;
+        }
+
+        .section-title {
+            font-size: 24px;
+            font-weight: 700;
+            color: #93c5fd;
+            margin-bottom: 30px;
+            text-align: center;
+            position: relative;
+            display: inline-block;
+            align-self: center;
+        }
+        
+        .section-title::after {
+            content: '';
+            display: block;
+            width: 60px;
+            height: 3px;
+            background-color: #3b82f6;
+            margin: 10px auto 0;
+            border-radius: 2px;
+        }
+
+        .cards-container {
+            display: flex;
+            gap: 30px;
+            justify-content: center;
+        }
+
+        .effect-card {
+            flex: 1;
+            background: rgba(30, 41, 59, 0.4);
+            border: 1px solid rgba(59, 130, 246, 0.2);
+            border-radius: 16px;
+            padding: 25px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+            transition: transform 0.3s ease, background 0.3s ease;
+        }
+
+        .effect-card:hover {
+            transform: translateY(-10px);
+            background: rgba(30, 41, 59, 0.7);
+            border-color: #60a5fa;
+            box-shadow: 0 10px 30px rgba(59, 130, 246, 0.15);
+        }
+
+        .icon-box {
+            width: 70px;
+            height: 70px;
+            border-radius: 50%;
+            background: rgba(15, 23, 42, 0.8);
+            border: 2px solid;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 28px;
+            margin-bottom: 20px;
+        }
+
+        .card-1 .icon-box { border-color: #ef4444; color: #ef4444; box-shadow: 0 0 15px rgba(239, 68, 68, 0.2); }
+        .card-2 .icon-box { border-color: #10b981; color: #10b981; box-shadow: 0 0 15px rgba(16, 185, 129, 0.2); }
+        .card-3 .icon-box { border-color: #3b82f6; color: #3b82f6; box-shadow: 0 0 15px rgba(59, 130, 246, 0.2); }
+
+        .card-title {
+            font-size: 18px;
+            font-weight: 700;
+            color: white;
+            margin-bottom: 12px;
+        }
+
+        .card-desc {
+            font-size: 14px;
+            color: #cbd5e1;
+            line-height: 1.6;
+        }
+
+        
+        .qna-section {
+            text-align: center;
+            margin-top: 20px;
+            padding-top: 25px;
+            border-top: 1px dashed rgba(71, 85, 105, 0.5);
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .demo-notice {
+            margin-bottom: 20px;
+            background: rgba(16, 185, 129, 0.1);
+            border: 1px solid rgba(16, 185, 129, 0.4);
+            display: inline-flex;
+            align-items: center;
+            padding: 8px 25px;
+            border-radius: 50px;
+            box-shadow: 0 0 15px rgba(16, 185, 129, 0.1);
+        }
+
+        .demo-badge {
+            color: #34d399;
+            font-weight: 800;
+            margin-right: 15px;
+            display: flex;
+            align-items: center;
+        }
+
+        .demo-badge i {
+            margin-right: 8px;
+            color: #ef4444;
+        }
+
+        .demo-text {
+            color: #e2e8f0;
+            font-size: 16px;
+            font-weight: 500;
+        }
+
+        .qna-title {
+            font-size: 50px;
+            font-weight: 900;
+            color: white;
+            margin-bottom: 10px;
+            letter-spacing: 2px;
+            text-shadow: 0 0 20px rgba(59, 130, 246, 0.4);
+        }
+
+        .qna-subtitle {
+            font-size: 22px;
+            color: #94a3b8;
+            font-weight: 300;
+            margin-bottom: 20px;
+        }
+
+        .thank-you-msg {
+            font-size: 18px;
+            color: #cbd5e1;
+            margin-bottom: 5px;
+        }
+
+        .contact-info {
+            display: inline-flex;
+            align-items: center;
+            background: rgba(30, 41, 59, 0.6);
+            padding: 8px 25px;
+            border-radius: 30px;
+            border: 1px solid rgba(59, 130, 246, 0.3);
+            margin-top: 15px;
+        }
+
+        .contact-info i {
+            margin-right: 10px;
+            color: #60a5fa;
+        }
+
+        .contact-info span {
+            color: #e2e8f0;
+            font-weight: 500;
+        }
+
+        
+        @keyframes pulse-opacity {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+        
+        .pulse-icon {
+            animation: pulse-opacity 1.5s infinite;
+        }
+
+        
+        .page-number {
+            position: absolute;
+            bottom: 20px;
+            right: 40px;
+            color: #64748b;
+            font-size: 14px;
+        }
+
+        
+        .bottom-decoration {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 6px;
+            background-color: #3b82f6; 
+        }
+    </style>
+</head>
+<body>
+  <div class="scale-wrap" id="scaleWrap">
+    <div class="deck" id="deck">
+      <div class="kbd-help" id="kbdHelp">←/→ 이동 · 숫자(1~9) 점프 · Home/End · Esc 전체화면</div>
+      <div class="nav-btn nav-prev" id="btnPrev" title="Prev (←)"><i class="fas fa-chevron-left"></i></div>
+      <div class="nav-btn nav-next" id="btnNext" title="Next (→)"><i class="fas fa-chevron-right"></i></div>
+      <div class="demo-zoom-overlay" id="demoZoomOverlay" aria-hidden="true">
+        <img id="demoZoomImg" alt="확대 이미지" />
+        <div class="zoom-hint">클릭해서 닫기</div>
+      </div>
+      <section class="slide active" data-index="0">
+<div class="slide-container">
+
+<div class="bg-pattern"></div>
+
+<div class="decorative-circle" style="width: 700px; height: 700px; top: 50%; left: 50%; transform: translate(-50%, -50%);"></div>
+<div class="decorative-circle" style="width: 950px; height: 950px; top: 50%; left: 50%; transform: translate(-50%, -50%); opacity: 0.5; border-style: dashed;"></div>
+
+<div class="etri-logo-text">
+<span class="text-blue-500 mr-2 text-2xl"><i class="fas fa-microchip"></i></span>
+<span>ETRI</span>
+<span class="font-light ml-3 text-base text-gray-400 border-l border-gray-600 pl-3">자율형IoT연구실</span>
+</div>
+
+<div class="date-badge">
+<p class="m-0 font-medium tracking-wide">2026.02.09 | 인턴 최종발표</p>
+</div>
+
+<div class="content-wrapper flex flex-col items-center">
+
+<div class="flex justify-center space-x-10 mb-10">
+<div class="flex flex-col items-center tech-icon-group">
+<div class="tech-icon-circle">
+<i class="fas fa-video text-2xl text-blue-400"></i>
+</div>
+<p class="text-xs text-gray-400 tracking-wider">CCTV</p>
+</div>
+<div class="flex flex-col items-center tech-icon-group">
+<div class="tech-icon-circle">
+<i class="fas fa-robot text-2xl text-blue-400"></i>
+</div>
+<p class="text-xs text-gray-400 tracking-wider">ROBOT</p>
+</div>
+<div class="flex flex-col items-center tech-icon-group">
+<div class="tech-icon-circle">
+<i class="fas fa-brain text-2xl text-blue-400"></i>
+</div>
+<p class="text-xs text-gray-400 tracking-wider">AI / ML</p>
+</div>
+<div class="flex flex-col items-center tech-icon-group">
+<div class="tech-icon-circle">
+<i class="fas fa-shield-halved text-2xl text-red-400"></i>
+</div>
+<p class="text-xs text-gray-400 tracking-wider">SECURITY</p>
+</div>
+</div>
+<h1 class="text-6xl font-black mb-6 tracking-tight title-glow text-white leading-tight">
+                폐쇄망 AI 기반<br>통합 관제 시스템
+            </h1>
+<div class="w-32 h-1.5 bg-blue-600 mx-auto mb-8 rounded-full"></div>
+<h2 class="text-xl font-light text-gray-300 leading-normal mb-16 uppercase tracking-wider">
+                Integrated System for AI Object Recognition &amp;<br>
+<span class="font-bold text-white">Remote Robot Response in Closed Networks</span>
+</h2>
+
+<div class="bg-gray-800 bg-opacity-40 border border-gray-700 rounded-xl px-12 py-6 flex items-center justify-center space-x-10 backdrop-filter backdrop-blur-sm shadow-xl">
+<div class="text-right border-r border-gray-600 pr-10">
+<p class="text-xs text-blue-400 mb-1 uppercase tracking-widest font-semibold">Department</p>
+<p class="font-bold text-xl text-white">자율형IoT연구실</p>
+</div>
+<div class="text-left">
+<p class="text-xs text-blue-400 mb-1 uppercase tracking-widest font-semibold">Presenter</p>
+<p class="font-bold text-xl text-white">황규범</p>
+</div>
+</div>
+</div>
+
+<div class="bottom-bar"></div>
+</div>
+      </section>
+      <section class="slide" data-index="1">
+<div class="slide-container">
+
+<div class="header">
+<div class="header-title">
+<i class="fas fa-search"></i>
+                연구 배경 및 필요성
+            </div>
+<div class="etri-logo-small">ETRI 자율형 IoT 연구실</div>
+</div>
+
+<div class="content-area">
+
+<div class="text-column">
+<div class="section-box">
+<div class="section-title">
+<i class="fas fa-network-wired mr-3"></i>
+                        폐쇄망(Closed Network) 환경의 특수성
+                    </div>
+<p class="section-desc">
+                        보안 정책상 외부 네트워크와 물리적·논리적으로 분리된 환경입니다.
+                        외부 클라우드 API 사용이 제한되며, <span class="highlight-text">내부 자원만을 활용한 독립적인 시스템 구축</span>이 필수적입니다.
+                    </p>
+</div>
+<div class="section-box">
+<div class="section-title">
+<i class="fas fa-video-slash mr-3"></i>
+                        기존 고정형 CCTV 관제의 한계
+                    </div>
+<p class="section-desc">
+                        사각지대가 존재하며, 탐지 후 <span class="highlight-text">추가적인 시각적 검증이 어렵습니다.</span>
+                        관리자가 직접 현장으로 이동해야 하는 비효율이 발생하며, 야간이나 주말 등 비상시 즉각적인 상황 파악이 제한됩니다.
+                    </p>
+</div>
+<div class="section-box" style="border-left-color: #10b981; background: rgba(16, 185, 129, 0.1);">
+<div class="section-title" style="color: #6ee7b7;">
+<i class="fas fa-check-circle mr-3"></i>
+                        통합 관제 시스템의 요구사항
+                    </div>
+<p class="section-desc">
+                        고정형 카메라와 <span class="text-green-400 font-bold">이동형 로봇</span>을 연동하여 사각지대를 해소해야 합니다.
+                        또한, 내부 시스템 보안을 유지하면서도 관리자에게 <span class="text-green-400 font-bold">외부 알림(Telegram 등)</span>을 안전하게 전달하는 분리된 아키텍처가 필요합니다.
+                    </p>
+</div>
+</div>
+
+<div class="visual-column">
+
+<div class="visual-card">
+<div class="card-header">
+<div class="icon-wrapper icon-lock">
+<i class="fas fa-lock"></i>
+</div>
+<div class="card-title">엄격한 보안 환경</div>
+</div>
+<div class="card-content">
+                        외부망 차단, 데이터 반출 금지<br/>
+                        클라우드 AI 서비스 사용 불가
+                    </div>
+</div>
+<div class="arrow-down">
+<i class="fas fa-arrow-down"></i>
+</div>
+
+<div class="visual-card">
+<div class="card-header">
+<div class="icon-wrapper icon-camera">
+<i class="fas fa-video"></i>
+</div>
+<div class="card-title">?⑥닚 紐⑤땲?곕쭅 ?쒓퀎</div>
+</div>
+<div class="card-content">
+                        고정 시점의 사각지대 발생<br/>
+                        이벤트 발생 시 능동적 대처 불가
+                    </div>
+</div>
+<div class="arrow-down" style="color: #3b82f6;">
+<i class="fas fa-arrow-down"></i>
+</div>
+
+<div class="visual-card center">
+<div class="card-header">
+<div class="icon-wrapper icon-shield">
+<i class="fas fa-robot"></i>
+</div>
+<div class="card-title text-blue-400">ETRI 통합 관제 솔루션</div>
+</div>
+<div class="card-content" style="color: #cbd5e1;">
+                        AI ?? ?? + ?? ?? ??<br/>
+                        망 분리 환경 맞춤형 알림 아키텍처
+                    </div>
+</div>
+</div>
+</div>
+
+<div class="page-number">02</div>
+</div>
+      </section>
+      <section class="slide" data-index="2">
+<div class="slide-container">
+<div class="bg-grid"></div>
+
+<div class="header">
+<div class="header-title">
+<i class="fas fa-layer-group"></i>
+<p>시스템 개요 및 핵심 가치</p>
+</div>
+<div class="etri-logo-small"><p>ETRI 자율형 IoT 연구실</p></div>
+</div>
+
+<div class="content-area">
+<div class="slide-title-wrapper">
+<h1 class="slide-main-title">ETRI Lab Guardian System ?? ??</h1>
+<p class="slide-subtitle">폐쇄망 환경의 보안 제약을 준수하며 지능형 관제와 원격 대응을 통합</p>
+</div>
+<div class="columns-container">
+
+<div class="column-card card-red">
+<div class="icon-circle">
+<i class="fas fa-bell"></i>
+</div>
+<div class="card-title"><p>실시간 위험 감지</p></div>
+<div class="feature-list">
+<div class="feature-item">
+<i class="fas fa-circle"></i>
+<p>YOLO 기반 객체 인식으로 침입/위험 즉시 탐지</p>
+</div>
+<div class="feature-item">
+<i class="fas fa-circle"></i>
+<p>객체 단위 이벤트 관리 및 중복 알림 방지</p>
+</div>
+<div class="feature-item">
+<i class="fas fa-circle"></i>
+<p>표준화된 위험/안전 상태 이벤트 프로토콜</p>
+</div>
+</div>
+</div>
+
+<div class="column-card card-blue">
+<div class="icon-circle">
+<i class="fas fa-file-video"></i>
+</div>
+<div class="card-title"><p>자동 증거 확보</p></div>
+<div class="feature-list">
+<div class="feature-item">
+<i class="fas fa-circle"></i>
+<p>이벤트 발생 시점 스냅샷 자동 생성</p>
+</div>
+<div class="feature-item">
+<i class="fas fa-circle"></i>
+<p>감지 전후 10초 고화질 영상 클립 저장</p>
+</div>
+<div class="feature-item">
+<i class="fas fa-circle"></i>
+<p>정적 이미지 서버를 통한 안정적 증거 열람</p>
+</div>
+</div>
+</div>
+
+<div class="column-card card-green">
+<div class="icon-circle">
+<i class="fas fa-server"></i>
+</div>
+<div class="card-title"><p>폐쇄망 안정 운영</p></div>
+<div class="feature-list">
+<div class="feature-item">
+<i class="fas fa-circle"></i>
+<p>내부 시스템과 외부 알림의 물리/논리적 분리</p>
+</div>
+<div class="feature-item">
+<i class="fas fa-circle"></i>
+<p>네트워크 장애 시에도 내부 관제 기능 유지</p>
+</div>
+<div class="feature-item">
+<i class="fas fa-circle"></i>
+<p>Telegram Bot을 활용한 안전한 외부 알림</p>
+</div>
+</div>
+</div>
+</div>
+<div class="summary-box">
+<p> <i class="fas fa-quote-left mr-2 opacity-50"></i>외부 의존성을 최소화하고 내부 자원 효율성을 극대화한 <strong>독립형 지능형 관제 플랫폼</strong><i class="fas fa-quote-right ml-2 opacity-50"></i></p>
+</div>
+</div>
+
+<div class="page-number"><p>03</p></div>
+</div>
+      </section>
+      <section class="slide" data-index="3">
+<div class="slide-container">
+<div class="bg-grid"></div>
+
+<div class="header">
+<div class="header-title">
+<i class="fas fa-sitemap"></i>
+            시스템 아키텍처
+        </div>
+<div class="etri-logo-small">ETRI 자율형 IoT 연구실</div>
+</div>
+
+<div class="content-area">
+
+<div class="desc-panel">
+
+<div class="component-card comp-edge">
+<div class="card-header">
+<span class="card-icon"><i class="fas fa-video"></i></span>
+                    Edge Devices
+                </div>
+<p class="card-desc">?? ?? ?? ? ??</p>
+<div class="mt-1">
+<span class="tech-tag">Fixed CCTV</span>
+<span class="tech-tag">Robot Cam</span>
+<span class="tech-tag">RTSP</span>
+</div>
+</div>
+
+<div class="component-card comp-ai">
+<div class="card-header">
+<span class="card-icon"><i class="fas fa-brain"></i></span>
+                    AI Compute Server
+                </div>
+<p class="card-desc">영상 소스 생성 및 전송</p>
+<div class="mt-1">
+<span class="tech-tag">FastAPI</span>
+<span class="tech-tag">YOLOv8</span>
+<span class="tech-tag">PyTorch</span>
+</div>
+</div>
+
+<div class="component-card comp-gateway">
+<div class="card-header">
+<span class="card-icon"><i class="fas fa-server"></i></span>
+                    Data/I-O Gateway
+                </div>
+<p class="card-desc">이벤트 처리 및 데이터 관리 허브</p>
+<div class="mt-1">
+<span class="tech-tag">C# .NET</span>
+<span class="tech-tag">Redis Queue</span>
+<span class="tech-tag">SQLite</span>
+</div>
+</div>
+
+<div class="component-card comp-web">
+<div class="card-header">
+<span class="card-icon"><i class="fas fa-desktop"></i></span>
+                    Web Dashboard
+                </div>
+<p class="card-desc">통합 관제 및 로봇 제어 UI</p>
+<div class="mt-1">
+<span class="tech-tag">React</span>
+<span class="tech-tag">TypeScript</span>
+<span class="tech-tag">HLS</span>
+</div>
+</div>
+
+<div class="component-card comp-ext">
+<div class="card-header">
+<span class="card-icon"><i class="fab fa-telegram"></i></span>
+                    External Service
+                </div>
+<p class="card-desc">보안 경계 외부 알림 전송</p>
+<div class="mt-1">
+<span class="tech-tag">Telegram Bot</span>
+<span class="tech-tag">Secure Gateway</span>
+</div>
+</div>
+</div>
+
+<div class="diagram-panel">
+<img alt="System Architecture Diagram" class="diagram-img" src="new diagram.png"/>
+
+<div class="legend-box">
+<div class="legend-item">
+<div class="legend-color" style="background-color: #60a5fa;"></div>
+<span>Video Stream</span>
+</div>
+<div class="legend-item">
+<div class="legend-color" style="background-color: #34d399;"></div>
+<span>Event Data</span>
+</div>
+<div class="legend-item">
+<div class="legend-color" style="background-color: #f87171;"></div>
+<span>Alert Signal</span>
+</div>
+</div>
+
+<div class="boundary-label">
+<i class="fas fa-shield-alt mr-1"></i> Network Boundary
+            </div>
+</div>
+</div>
+
+<div class="page-number">04</div>
+</div>
+      </section>
+      <section class="slide" data-index="4">
+<div class="slide-container">
+<div class="bg-grid"></div>
+
+<div class="header">
+<div class="header-title">
+<i class="fas fa-random"></i>
+                표준 이벤트 흐름 (Standard Event Flow)
+            </div>
+<div class="etri-logo-small">ETRI 자율형 IoT 연구실</div>
+</div>
+
+<div class="content-area">
+
+<div class="status-section">
+<div class="section-header">이벤트 상태 정의 (Event States)</div>
+<div class="status-grid">
+
+<div class="status-card danger">
+<div class="status-label">
+                            DANGER
+                            <i class="fas fa-exclamation-triangle"></i>
+</div>
+<p class="status-desc">미인가자/위험 객체 탐지 시 발생<br>즉각적인 알림 및 녹화 트리거</p>
+</div>
+
+<div class="status-card safe">
+<div class="status-label">
+                            SAFE
+                            <i class="fas fa-shield-alt"></i>
+</div>
+<p class="status-desc">위험 객체 소멸 또는 안전 확인<br>이벤트 종료 처리</p>
+</div>
+
+<div class="status-card conn">
+<div class="status-label">
+                            CONN / DISCONN
+                            <i class="fas fa-link"></i>
+</div>
+<p class="status-desc">카메라/로봇 연결 상태 모니터링<br>시스템 가용성 확인</p>
+</div>
+
+<div class="status-card mode">
+<div class="status-label">
+                            MONITOR / CONTROL
+                            <i class="fas fa-gamepad"></i>
+</div>
+<p class="status-desc">?? ?? ?? ? ?? ?? ??<br>?? ?? ??</p>
+</div>
+</div>
+</div>
+
+<div class="section-header">이벤트 처리 절차 (Processing Pipeline)</div>
+<div class="flow-section">
+<div class="process-steps">
+<div class="process-line"></div>
+<div class="process-line-active"></div>
+
+<div class="step-item">
+<div class="step-circle">
+<i class="fas fa-eye"></i>
+</div>
+<div class="step-title">1. 객체 인식 (Detection)</div>
+<div class="step-desc">
+<p>RTSP 스트림 분석</p>
+<p class="text-xs text-blue-400 mt-1">YOLOv8 Inference</p>
+</div>
+</div>
+<i class="fas fa-chevron-right arrow-icon"></i>
+
+<div class="step-item">
+<div class="step-circle">
+<i class="fas fa-fingerprint"></i>
+</div>
+<div class="step-title">2. 이벤트 생성 (Create)</div>
+<div class="step-desc">
+<p>?? ID ?? ??</p>
+<p class="text-xs text-blue-400 mt-1">Unique Event ID ??</p>
+</div>
+</div>
+<i class="fas fa-chevron-right arrow-icon"></i>
+
+<div class="step-item">
+<div class="step-circle">
+<i class="fas fa-server"></i>
+</div>
+<div class="step-title">3. 비동기 처리 (Async)</div>
+<div class="step-desc">
+<p>메시지 큐(Queue) 적재</p>
+<p class="text-xs text-blue-400 mt-1">Redis Pub/Sub</p>
+</div>
+</div>
+<i class="fas fa-chevron-right arrow-icon"></i>
+
+<div class="step-item">
+<div class="step-circle" style="border-color: #10b981; color: #10b981;">
+<i class="fas fa-bell"></i>
+</div>
+<div class="step-title">4. 대응 및 알림 (Action)</div>
+<div class="step-desc">
+<p>?? ?? &amp; ?? ??</p>
+<p class="text-xs text-green-400 mt-1">Snapshot / Telegram</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+
+<div class="page-number">05</div>
+</div>
+      </section>
+      <section class="slide" data-index="5">
+<div class="slide-container">
+<div class="bg-grid"></div>
+
+<div class="header">
+<div class="header-title">
+<i class="fas fa-star"></i>
+<p>주요 기능 하이라이트</p>
+</div>
+<div class="etri-logo-small"><p>ETRI 자율형 IoT 연구실</p></div>
+</div>
+
+<div class="content-area">
+<div class="slide-title-wrapper">
+<h1 class="slide-main-title">ETRI Lab Guardian System 주요 기능</h1>
+<p class="slide-subtitle">증거 확보, 시스템 구조, 운영 편의성을 극대화한 5가지 핵심 기능</p>
+</div>
+
+<div class="columns-container">
+
+<div class="column-card card-blue">
+<div class="icon-circle">
+<i class="fas fa-images"></i>
+</div>
+<div class="card-title"><p>스마트 증거 관리</p></div>
+<div class="feature-list">
+<div class="feature-item">
+<i class="fas fa-camera"></i>
+<div>
+<span class="feature-strong">스마트 증거 기록</span>
+<p>이벤트 발생 시점 스냅샷 및 전후 10초 영상 클립 자동 저장</p>
+</div>
+</div>
+<div class="feature-item">
+<i class="fas fa-server"></i>
+<div>
+<span class="feature-strong">Static Image Server</span>
+<p>정적 파일 서버 구축으로 404 오류 방지 및 안정적 열람</p>
+</div>
+</div>
+</div>
+</div>
+
+<div class="column-card card-green">
+<div class="icon-circle">
+<i class="fas fa-network-wired"></i>
+</div>
+<div class="card-title"><p>유연한 연동 구조</p></div>
+<div class="feature-list">
+<div class="feature-item">
+<i class="fas fa-cubes"></i>
+<div>
+<span class="feature-strong">모듈화 구조</span>
+<p>Algorithm, Gateway, Web 모듈의 독립적 설계로 유지보수 용이</p>
+</div>
+</div>
+<div class="feature-item">
+<i class="fab fa-telegram-plane"></i>
+<div>
+<span class="feature-strong">Telegram 알림</span>
+<p>내부 망과 분리된 안전한 외부 알림 체계 (실시간 시연 예정)</p>
+</div>
+</div>
+</div>
+</div>
+
+<div class="column-card card-purple">
+<div class="icon-circle">
+<i class="fas fa-desktop"></i>
+</div>
+<div class="card-title"><p>운영 가시성 확보</p></div>
+<div class="feature-list">
+<div class="feature-item">
+<i class="fas fa-columns"></i>
+<div>
+<span class="feature-strong">Dual-Column Log</span>
+<p>시스템 로그와 탐지 이벤트를 분리하여 정보 혼선 방지</p>
+</div>
+</div>
+<div class="feature-item">
+<i class="fas fa-gamepad"></i>
+<div>
+<span class="feature-strong">통합 관제 대시보드</span>
+<p>원격 로봇 수동 제어 및 다중 카메라 통합 모니터링</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+
+<div class="demo-section">
+<div class="demo-header">
+<div class="demo-title">
+<i class="fas fa-play-circle mr-2"></i>
+<p>실제 시스템 구동 화면 (Live Demo Snapshot)</p>
+<span class="demo-badge">LIVE SYSTEM</span>
+</div>
+<div class="text-xs text-gray-400"><p>※ 발표 중 실시간 텔레그램 알림 시연 포함</p></div>
+</div>
+<div class="demo-media-split">
+<div class="demo-pane">
+<span class="demo-pane-label">DEMO PHOTO</span>
+<img class="demo-zoom-target" alt="실제 시스템 구동 화면 사진" src="demo.png"/>
+</div>
+<div class="demo-pane">
+<span class="demo-pane-label">DEMO VIDEO</span>
+<video controls muted playsinline preload="metadata" poster="demo-video-poster.jpg">
+<source src="demo-video.mp4" type="video/mp4"/>
+</video>
+</div>
+</div>
+</div>
+</div>
+
+<div class="page-number"><p>06</p></div>
+</div>
+      </section>
+      <section class="slide" data-index="6">
+<div class="slide-container">
+
+<div class="bg-grid"></div>
+
+<div class="header">
+<div class="header-title">
+<i class="fas fa-cogs"></i>
+                핵심 기술 의사결정 (Technical Decisions)
+            </div>
+<div class="etri-logo-small">ETRI 자율형 IoT 연구실</div>
+</div>
+
+<div class="content-area">
+
+<div class="text-column">
+
+<div class="section-box" style="border-left-color: #3b82f6;">
+<div class="section-title">
+<i class="fas fa-microchip mr-2"></i>
+                        ??(Python) vs I/O(C#) ?? ??
+                    </div>
+<p class="section-desc">
+                        AI 추론과 같은 무거운 연산은 <span class="text-blue-400 font-bold">Python(FastAPI)</span>이 전담하고, 시스템 제어 및 다중 장치 I/O는 <span class="text-blue-400 font-bold">C#(.NET)</span>이 처리하여 성능 병목을 해소하고 안정성을 확보했습니다.
+                    </p>
+</div>
+
+<div class="section-box" style="border-left-color: #a855f7;">
+<div class="section-title" style="color: #c084fc;">
+<i class="fas fa-layer-group mr-2"></i>
+                        Redis Queue + DLQ 기반 비동기 처리
+                    </div>
+<p class="section-desc">
+                        이벤트 발생과 처리를 비동기로 분리하여 시스템 부하를 조절합니다. 처리 실패 메시지는 <span class="text-purple-400 font-bold">DLQ(Dead Letter Queue)</span>로 격리하여 데이터 유실을 방지하고 재시도 메커니즘을 구현했습니다.
+                    </p>
+</div>
+
+<div class="section-box" style="border-left-color: #f59e0b;">
+<div class="section-title" style="color: #fbbf24;">
+<i class="fas fa-hdd mr-2"></i>
+                        대용량 미디어 처리 최적화
+                    </div>
+<p class="section-desc">
+                        이미지와 영상 원본은 파일 시스템에 저장하고, 데이터베이스(SQLite)에는 <span class="text-yellow-400 font-bold">파일 경로와 메타데이터</span>만 저장하여 DB 부하를 최소화하고 조회 속도를 향상시켰습니다.
+                    </p>
+</div>
+
+<div class="section-box" style="border-left-color: #10b981;">
+<div class="section-title" style="color: #6ee7b7;">
+<i class="fas fa-video mr-2"></i>
+                        스트리밍과 이벤트 저장 파이프라인 분리
+                    </div>
+<p class="section-desc">
+                        평상시 모니터링은 네트워크 대역폭에 맞춰 적정 화질로 스트리밍하되, 이벤트 발생 시에는 <span class="text-green-400 font-bold">최대 해상도</span>로 증거 영상을 별도 저장하여 품질과 효율성을 동시에 달성했습니다.
+                    </p>
+</div>
+</div>
+
+<div class="visual-column">
+<div class="decision-grid">
+
+<div class="decision-card theme-blue">
+<div class="card-icon-circle">
+<i class="fas fa-code-branch"></i>
+</div>
+<div class="card-label">Polyglot Architecture</div>
+<div class="card-subtext">
+                        Python: AI Compute<br/>
+                        C#: System Control<br/>
+                        프로세스 격리 및 최적화
+                    </div>
+</div>
+
+<div class="decision-card theme-purple">
+<div class="card-icon-circle">
+<i class="fas fa-envelope-open-text"></i>
+</div>
+<div class="card-label">Reliable Messaging</div>
+<div class="card-subtext">
+                        Redis Queue<br/>
+                        Dead Letter Queue<br/>
+                        결합도 감소
+                    </div>
+</div>
+
+<div class="decision-card theme-orange">
+<div class="card-icon-circle">
+<i class="fas fa-database"></i>
+</div>
+<div class="card-label">Efficient Storage</div>
+<div class="card-subtext">
+                        File System: Raw Data<br/>
+                        DB: Metadata Only<br/>
+                        I/O 병목 방지
+                    </div>
+</div>
+
+<div class="decision-card theme-green">
+<div class="card-icon-circle">
+<i class="fas fa-film"></i>
+</div>
+<div class="card-label">Adaptive Media</div>
+<div class="card-subtext">
+                        Monitoring: Low Latency<br/>
+                        Evidence: High Quality<br/>
+                        이중 파이프라인
+                    </div>
+</div>
+</div>
+</div>
+</div>
+
+<div class="page-number">07</div>
+</div>
+      </section>
+      <section class="slide" data-index="7">
+<div class="slide-container">
+<div class="bg-grid"></div>
+
+<div class="header">
+<div class="header-title">
+<i class="fas fa-folder-tree"></i>
+<p>?? ?? ? ?? ??</p>
+</div>
+<div class="etri-logo-small"><p>ETRI 자율형 IoT 연구실</p></div>
+</div>
+
+<div class="content-area">
+<div class="slide-title-wrapper">
+<h1 class="slide-main-title">시스템 모듈 구조화</h1>
+<p class="slide-subtitle">기능별로 분리된 3개의 핵심 모듈과 주요 구현 파일 구성</p>
+</div>
+<div class="columns-container">
+
+<div class="column-card card-blue">
+<div class="icon-circle">
+<i class="fas fa-brain"></i>
+</div>
+<div class="card-title"><p>Algorithm Module</p></div>
+<div class="file-structure">
+<div class="folder-item">
+<i class="fas fa-folder"></i>
+<p>algorithm_server/</p>
+</div>
+<div class="file-item">
+<i class="fas fa-file-code py-icon"></i>
+<p>main.py</p>
+<span class="file-desc">FastAPI 진입</span>
+</div>
+<div class="file-item">
+<i class="fas fa-file-code py-icon"></i>
+<p>detector.py</p>
+<span class="file-desc">YOLO 추론</span>
+</div>
+<div class="file-item">
+<i class="fas fa-file-code py-icon"></i>
+<p>event_schema.py</p>
+<span class="file-desc">메시지 포맷</span>
+</div>
+<div class="file-item">
+<i class="fas fa-file-code py-icon"></i>
+<p>stream_loader.py</p>
+<span class="file-desc">RTSP 처리</span>
+</div>
+</div>
+<div class="mt-4 text-sm text-blue-200 text-center opacity-80">
+<p>Python 기반 AI 연산 및 추론 담당</p>
+</div>
+</div>
+
+<div class="column-card card-green">
+<div class="icon-circle">
+<i class="fas fa-network-wired"></i>
+</div>
+<div class="card-title"><p>Gateway Module</p></div>
+<div class="file-structure">
+<div class="folder-item">
+<i class="fas fa-folder"></i>
+<p>GatewayService/</p>
+</div>
+<div class="file-item">
+<i class="fas fa-file-code cs-icon"></i>
+<p>Program.cs</p>
+<span class="file-desc">서비스 구동</span>
+</div>
+<div class="file-item">
+<i class="fas fa-file-code cs-icon"></i>
+<p>RedisConsumer.cs</p>
+<span class="file-desc">큐 구독</span>
+</div>
+<div class="file-item">
+<i class="fas fa-file-code cs-icon"></i>
+<p>VideoManager.cs</p>
+<span class="file-desc">I/O 저장</span>
+</div>
+<div class="file-item">
+<i class="fas fa-file-code cs-icon"></i>
+<p>DBContext.cs</p>
+<span class="file-desc">SQLite 연결</span>
+</div>
+</div>
+<div class="mt-4 text-sm text-green-200 text-center opacity-80">
+<p>C# .NET 기반 데이터 I/O 처리</p>
+</div>
+</div>
+
+<div class="column-card card-red">
+<div class="icon-circle">
+<i class="fas fa-desktop"></i>
+</div>
+<div class="card-title"><p>Web Dashboard</p></div>
+<div class="file-structure">
+<div class="folder-item">
+<i class="fas fa-folder"></i>
+<p>src/</p>
+</div>
+<div class="file-item">
+<i class="fas fa-file-code tsx-icon"></i>
+<p>App.tsx</p>
+<span class="file-desc">라우팅</span>
+</div>
+<div class="file-item">
+<i class="fas fa-file-code tsx-icon"></i>
+<p>Dashboard.tsx</p>
+<span class="file-desc">메인 뷰</span>
+</div>
+<div class="file-item">
+<i class="fas fa-file-code tsx-icon"></i>
+<p>RobotControl.tsx</p>
+<span class="file-desc">원격 조종</span>
+</div>
+<div class="file-item">
+<i class="fas fa-file-code tsx-icon"></i>
+<p>EventLog.tsx</p>
+<span class="file-desc">로그 패널</span>
+</div>
+</div>
+<div class="mt-4 text-sm text-red-200 text-center opacity-80">
+<p>React 기반 모니터링/제어 UI</p>
+</div>
+</div>
+</div>
+<div class="summary-box">
+<p><i class="fas fa-code-branch mr-2"></i><strong>느슨한 결합(Loose Coupling)</strong> 원칙을 적용하여 각 모듈의 독립적인 유지보수와 확장이 가능하도록 설계</p>
+</div>
+</div>
+
+<div class="page-number"><p>08</p></div>
+</div>
+      </section>
+      <section class="slide" data-index="8">
+<div class="slide-container">
+<div class="bg-grid"></div>
+
+<div class="header">
+<div class="header-title">
+<i class="fas fa-tools"></i>
+                운영 최적화 및 트러블슈팅
+            </div>
+<div class="etri-logo-small">ETRI 자율형 IoT 연구실</div>
+</div>
+
+<div class="content-area">
+
+<div class="trouble-card optimization-card">
+<div class="card-header">
+<div class="card-title">
+<div class="card-icon opt-icon"><i class="fas fa-sliders-h"></i></div>
+                        스트리밍 품질 자동 조절
+                    </div>
+<span class="card-tag">Operation Opt</span>
+</div>
+<div class="card-body">
+<div class="info-section challenge-section">
+<div class="section-label label-challenge">
+<i class="fas fa-flag mr-2"></i>Goal
+                        </div>
+<p class="content-text">
+                            폐쇄망의 제한된 자원 환경에서 네트워크 부하를 최소화하면서도,<br>결정적인 순간에는 <span style="color: #fcd34d; font-weight: 600;">고품질 증거 확보</span> 필요
+                        </p>
+</div>
+<div class="flow-arrow">
+<i class="fas fa-arrow-down"></i>
+</div>
+<div class="info-section strategy-section">
+<div class="section-label label-strategy">
+<i class="fas fa-lightbulb mr-2"></i>Adaptive Strategy
+                        </div>
+<p class="content-text">
+                            평상시 저화질 모니터링 → <strong>이벤트 감지 시 고화질 녹화 전환</strong><br>→ 종료 후 복귀하는 <span class="highlight-opt">적응형 스트리밍</span> 전략 적용
+                        </p>
+</div>
+</div>
+</div>
+
+<div class="trouble-card">
+<div class="card-header">
+<div class="card-title">
+<div class="card-icon"><i class="fas fa-video"></i></div>
+                        인코딩 지연 해결
+                    </div>
+<span class="card-tag">Media Pipeline</span>
+</div>
+<div class="card-body">
+<div class="info-section issue-section">
+<div class="section-label label-issue">
+<i class="fas fa-exclamation-circle mr-2"></i>Problem
+                        </div>
+<p class="content-text">
+                            RealSense 고해상도 영상을 CPU 기반 H.264로 인코딩 시 <span style="color: #fca5a5; font-weight: 600;">심각한 프레임 드랍</span> 발생
+                        </p>
+</div>
+<div class="flow-arrow">
+<i class="fas fa-arrow-down"></i>
+</div>
+<div class="info-section solution-section">
+<div class="section-label label-solution">
+<i class="fas fa-check-circle mr-2"></i>Solution
+                        </div>
+<p class="content-text">
+                            GStreamer 파이프라인 재구성:<br><span class="highlight-text">하드웨어 가속 인코딩</span> 적용 및 불필요한 색공간 변환 단계 제거
+                        </p>
+</div>
+</div>
+</div>
+
+<div class="trouble-card">
+<div class="card-header">
+<div class="card-title">
+<div class="card-icon"><i class="fas fa-image"></i></div>
+                        이미지 404 해결
+                    </div>
+<span class="card-tag">Web/I-O</span>
+</div>
+<div class="card-body">
+<div class="info-section issue-section">
+<div class="section-label label-issue">
+<i class="fas fa-exclamation-circle mr-2"></i>Problem
+                        </div>
+<p class="content-text">
+                            저장 속도보다 요청이 빨라 발생하는 <span style="color: #fca5a5; font-weight: 600;">Race Condition</span> (404 Not Found)
+                        </p>
+</div>
+<div class="flow-arrow">
+<i class="fas fa-arrow-down"></i>
+</div>
+<div class="info-section solution-section">
+<div class="section-label label-solution">
+<i class="fas fa-check-circle mr-2"></i>Solution
+                        </div>
+<p class="content-text">
+                            FastAPI 내 <span class="highlight-text">독립 정적 파일 서버</span> 구축,<br>클라이언트 재시도 로직 및 캐시 무효화 헤더 적용
+                        </p>
+</div>
+</div>
+</div>
+
+<div class="trouble-card">
+<div class="card-header">
+<div class="card-title">
+<div class="card-icon"><i class="fas fa-database"></i></div>
+                        DB Lock 방지
+                    </div>
+<span class="card-tag">Database</span>
+</div>
+<div class="card-body">
+<div class="info-section issue-section">
+<div class="section-label label-issue">
+<i class="fas fa-exclamation-circle mr-2"></i>Problem
+                        </div>
+<p class="content-text">
+                            다수 카메라 프로세스의 동시 접근으로 인한 <span style="color: #fca5a5; font-weight: 600;">Database Locked</span> 및 데이터 유실
+                        </p>
+</div>
+<div class="flow-arrow">
+<i class="fas fa-arrow-down"></i>
+</div>
+<div class="info-section solution-section">
+<div class="section-label label-solution">
+<i class="fas fa-check-circle mr-2"></i>Solution
+                        </div>
+<p class="content-text">
+<span class="highlight-text">Redis Queue</span> 도입: DB 쓰기 작업을 단일 워커(Single Worker)가 순차 처리 (Producer-Consumer 패턴)
+                        </p>
+</div>
+</div>
+</div>
+</div>
+
+<div class="page-number">09</div>
+</div>
+      </section>
+      <section class="slide" data-index="9">
+<div class="slide-container">
+<div class="bg-grid"></div>
+<div class="glowing-orb"></div>
+
+<div class="header">
+<div class="header-title">
+<i class="fas fa-expand-arrows-alt"></i>
+                확장 가능성
+            </div>
+<div class="etri-logo-small">ETRI 자율형 IoT 연구실</div>
+</div>
+
+<div class="content-area">
+<div class="text-column">
+<div class="section-box">
+<div class="section-title">
+<i class="fas fa-layer-group mr-3"></i>
+                        다수 로봇 및 카메라 확장 구조
+                    </div>
+<p class="section-desc">
+                        스트림 단위의 독립 파이프라인 설계로 <span class="highlight-text">N개의 카메라와 로봇을 손쉽게 추가</span>할 수 있습니다.
+                        Redis Queue 기반의 느슨한 결합으로 시스템 부하를 효과적으로 분산하며, 필요 시 AI 연산 노드를 수평적으로 확장(Scale-out)할 수 있습니다.
+                    </p>
+</div>
+<div class="section-box" style="border-left-color: #10b981;">
+<div class="section-title" style="color: #6ee7b7;">
+<i class="fas fa-industry mr-3"></i>
+                        다양한 산업 현장 적용
+                    </div>
+<p class="section-desc">
+                        본 시스템은 연구실 뿐만 아니라 <span class="text-green-400 font-bold">스마트 팩토리, 발전소, 데이터 센터</span> 등 보안이 중요한 폐쇄망 환경 어디든 적용 가능합니다.
+                        특히 위험 지역이나 사람이 접근하기 힘든 구역의 무인 순찰 및 이상 징후 감지에 탁월한 효과를 발휘합니다.
+                    </p>
+</div>
+<div class="section-box" style="border-left-color: #fbbf24;">
+<div class="section-title" style="color: #fcd34d;">
+<i class="fas fa-plug mr-3"></i>
+                        기존 보안 시스템과의 통합
+                    </div>
+<p class="section-desc">
+                        출입 통제 시스템, 화재 감지 센서 등 <span class="text-yellow-400 font-bold">레거시 보안 장비와 이벤트를 연동</span>할 수 있습니다.
+                        정책 기반 알림 라우팅을 통해 화재 감지 시 로봇이 해당 구역으로 자동 출동하는 시나리오 등 고도화된 대응 체계 구축이 가능합니다.
+                    </p>
+</div>
+</div>
+
+<div class="visual-column">
+<div class="visual-card">
+<div class="card-header">
+<div class="icon-wrapper icon-expand">
+<i class="fas fa-server"></i>
+</div>
+<div class="card-title">Scale-Out 아키텍처</div>
+</div>
+<div class="card-content">
+                        컨테이너 기반 서비스 확장<br/>
+                        다중 로봇/CCTV 통합 제어
+                    </div>
+</div>
+<div class="arrow-down">
+<i class="fas fa-plus"></i>
+</div>
+<div class="visual-card">
+<div class="card-header">
+<div class="icon-wrapper icon-industry">
+<i class="fas fa-warehouse"></i>
+</div>
+<div class="card-title">산업/공공 분야 확대</div>
+</div>
+<div class="card-content">
+                        스마트 팩토리 위험 감지<br/>
+                        공공 시설 무인 경비
+                    </div>
+</div>
+<div class="arrow-down" style="color: #fbbf24;">
+<i class="fas fa-link"></i>
+</div>
+<div class="visual-card center">
+<div class="card-header">
+<div class="icon-wrapper icon-connect">
+<i class="fas fa-network-wired"></i>
+</div>
+<div class="card-title text-yellow-400">Total Security Platform</div>
+</div>
+<div class="card-content" style="color: #cbd5e1;">
+                        IoT 센서 + 출입 통제 연동<br/>
+                        지능형 종합 관제 플랫폼으로 진화
+                    </div>
+</div>
+</div>
+</div>
+
+<div class="page-number">10</div>
+</div>
+      </section>
+
+      <section class="slide" data-index="10">
+<div class="slide-container">
+<div class="bg-pattern"></div>
+
+<div class="header">
+<div class="header-title">
+<i class="fas fa-flag-checkered"></i>
+            ?? ? Q&amp;A
+        </div>
+<div class="etri-logo-small">ETRI 자율형 IoT 연구실</div>
+</div>
+
+<div class="content-area">
+
+<div class="summary-section">
+<div class="section-title">연구 기대효과 요약</div>
+<div class="cards-container">
+
+<div class="effect-card card-1">
+<div class="icon-box">
+<i class="fas fa-shield-virus"></i>
+</div>
+<p class="card-title">보안성 극대화</p>
+<p class="card-desc">
+                        폐쇄망 환경의 제약을 준수하며<br/>
+                        외부 의존성 없는 <strong>독립적 관제</strong> 실현
+                    </p>
+</div>
+
+<div class="effect-card card-2">
+<div class="icon-box">
+<i class="fas fa-robot"></i>
+</div>
+<p class="card-title">운영 효율성 향상</p>
+<p class="card-desc">
+                        AI 자동 탐지와 <strong>로봇 원격 검증</strong>의 시너지로<br/>
+                        현장 출동 최소화 및 대응 속도 개선
+                    </p>
+</div>
+
+<div class="effect-card card-3">
+<div class="icon-box">
+<i class="fas fa-puzzle-piece"></i>
+</div>
+<p class="card-title">?뺤옣 ?⑹씠??</p>
+<p class="card-desc">
+                        모듈화된 아키텍처 설계를 통해<br/>
+                        다양한 <strong>산업 현장 및 보안 시스템</strong>에 적용 가능
+                    </p>
+</div>
+</div>
+</div>
+
+<div class="qna-section">
+<h1 class="qna-title">Q &amp; A</h1>
+<p class="qna-subtitle">질문이 있으시면 자유롭게 말씀해 주세요.</p>
+<p class="thank-you-msg">경청해 주셔서 감사합니다.</p>
+<div class="contact-info">
+<i class="fas fa-envelope"></i>
+<span>etri33602@etri.re.kr</span>
+</div>
+</div>
+</div>
+
+<div class="bottom-decoration"></div>
+
+<div class="page-number">11</div>
+</div>
+      </section>
+    </div>
+  </div>
+
+  <script>
+    function restoreCorruptedText() {
+      const setText = (el, txt) => {
+        if (!el) return;
+        el.textContent = txt;
+        if (typeof txt === "string" && txt.includes("\n")) {
+          el.style.whiteSpace = "pre-line";
+        }
+      };
+      const setHTML = (el, html) => { if (el) el.innerHTML = html; };
+      const setList = (root, selector, values) => {
+        if (!root) return;
+        const nodes = root.querySelectorAll(selector);
+        values.forEach((v, i) => {
+          if (!nodes[i]) return;
+          nodes[i].textContent = v;
+          if (typeof v === "string" && v.includes("\n")) {
+            nodes[i].style.whiteSpace = "pre-line";
+          }
+        });
+      };
+
+      document.title = "폐쇄망 AI 기반 통합 관제 시스템 - Slides";
+      setText(document.getElementById("kbdHelp"), "←/→ 이동 · 숫자(1~9) 점프 · Home/End · Esc 전체화면");
+      document.querySelectorAll(".etri-logo-small").forEach((el) => setText(el, "ETRI 자율형 IoT 연구실"));
+
+      const s0 = document.querySelector('section[data-index="0"]');
+      if (s0) {
+        setText(s0.querySelector(".s1-date-badge p"), "2026.02.09 | 인턴 최종발표");
+        setHTML(s0.querySelector("h1"), "폐쇄망 AI 기반<br>통합 관제 시스템");
+        setHTML(
+          s0.querySelector("h2"),
+          "INTEGRATED SYSTEM FOR AI OBJECT RECOGNITION &amp;<br><span class=\"font-bold text-white\">REMOTE ROBOT RESPONSE IN CLOSED NETWORKS</span>"
+        );
+      }
+
+      const s1 = document.querySelector('section[data-index="1"]');
+      if (s1) {
+        setHTML(s1.querySelector(".header-title"), '<i class="fas fa-search"></i>연구 배경 및 필요성');
+        const st = s1.querySelectorAll(".section-title");
+        if (st[0]) st[0].innerHTML = '<i class="fas fa-network-wired mr-3"></i>폐쇄망(Closed Network) 환경의 특수성';
+        if (st[1]) st[1].innerHTML = '<i class="fas fa-video-slash mr-3"></i>기존 고정형 CCTV 관제의 한계';
+        if (st[2]) st[2].innerHTML = '<i class="fas fa-check-circle mr-3"></i>통합 관제 시스템의 요구사항';
+        const sd = s1.querySelectorAll(".section-desc");
+        if (sd[0]) sd[0].innerHTML = '보안 정책상 외부 네트워크와 물리적·논리적으로 분리된 환경입니다. 외부 클라우드 API 사용이 제한되며, <span class="highlight-text">내부 자원만을 활용한 독립적인 시스템 구축</span>이 필수적입니다.';
+        if (sd[1]) sd[1].innerHTML = '사각지대가 존재하며, 탐지 후 <span class="highlight-text">추가적인 시각적 검증이 어렵습니다.</span> 관리자가 직접 현장으로 이동해야 하는 비효율이 발생하며, 야간이나 주말 등 비상시 즉각적인 상황 파악이 제한됩니다.';
+        if (sd[2]) sd[2].innerHTML = '고정형 카메라와 <span class="text-green-400 font-bold">이동형 로봇</span>을 연동하여 사각지대를 해소해야 합니다. 또한, 내부 시스템 보안을 유지하면서도 관리자에게 <span class="text-green-400 font-bold">외부 알림(Telegram 등)</span>을 안전하게 전달하는 분리된 아키텍처가 필요합니다.';
+        setList(s1, ".card-title", ["엄격한 보안 환경", "단순 모니터링 한계", "ETRI 통합 관제 솔루션"]);
+        const cardContents = s1.querySelectorAll(".card-content");
+        if (cardContents[0]) cardContents[0].innerHTML = "외부망 차단, 데이터 반출 금지<br/>클라우드 AI 서비스 사용 불가";
+        if (cardContents[1]) cardContents[1].innerHTML = "고정 시점의 사각지대 발생<br/>이벤트 발생 시 능동적 대처 불가";
+        if (cardContents[2]) cardContents[2].innerHTML = "AI 객체 인식 + 로봇 원격 검증<br/>망 분리 환경 맞춤형 알림 아키텍처";
+      }
+
+      const s2 = document.querySelector('section[data-index="2"]');
+      if (s2) {
+        setHTML(s2.querySelector(".header-title"), '<i class="fas fa-layer-group"></i><p>시스템 개요 및 핵심 가치</p>');
+        setText(s2.querySelector(".slide-main-title"), "ETRI Lab Guardian System 핵심 가치");
+        setText(s2.querySelector(".slide-subtitle"), "폐쇄망 환경의 보안 제약을 준수하며 지능형 관제와 원격 대응을 통합");
+        setList(s2, ".card-title p", ["실시간 위험 감지", "자동 증거 확보", "폐쇄망 안정 운영"]);
+        const featureItems = s2.querySelectorAll(".feature-item p");
+        const featureTexts = [
+          "YOLO 기반 객체 인식으로 침입/위험 즉시 탐지",
+          "객체 단위 이벤트 관리 및 중복 알림 방지",
+          "표준화된 위험/안전 상태 이벤트 프로토콜",
+          "이벤트 발생 시점 스냅샷 자동 생성",
+          "감지 전후 10초 고화질 영상 클립 저장",
+          "정적 이미지 서버를 통한 안정적 증거 열람",
+          "내부 시스템과 외부 알림의 물리/논리적 분리",
+          "네트워크 장애 시에도 내부 관제 기능 유지",
+          "Telegram Bot을 활용한 안전한 외부 알림"
+        ];
+        featureTexts.forEach((t, i) => setText(featureItems[i], t));
+        const summary = s2.querySelector(".summary-box p");
+        if (summary) summary.innerHTML = '<i class="fas fa-quote-left mr-2 opacity-50"></i>외부 의존성을 최소화하고 내부 자원 효율성을 극대화한 <strong>독립형 지능형 관제 플랫폼</strong><i class="fas fa-quote-right ml-2 opacity-50"></i>';
+      }
+
+      const s3 = document.querySelector('section[data-index="3"]');
+      if (s3) {
+        setHTML(s3.querySelector(".header-title"), '<i class="fas fa-sitemap"></i>시스템 아키텍처');
+        setList(s3, ".card-header", ["Edge Devices", "AI Compute Server", "Data/I-O Gateway", "Web Dashboard", "External Service"]);
+        setList(s3, ".card-desc", [
+          "영상 소스 생성 및 전송",
+          "실시간 객체 인식 및 추론",
+          "이벤트 처리 및 데이터 관리 허브",
+          "통합 관제 및 로봇 제어 UI",
+          "보안 경계 외부 알림 전송"
+        ]);
+        setText(s3.querySelector(".boundary-label"), "Network Boundary");
+      }
+
+      const s4 = document.querySelector('section[data-index="4"]');
+      if (s4) {
+        setHTML(s4.querySelector(".header-title"), '<i class="fas fa-random"></i>표준 이벤트 흐름 (Standard Event Flow)');
+        setText(s4.querySelectorAll(".section-header")[0], "이벤트 상태 정의 (Event States)");
+        setText(s4.querySelectorAll(".section-header")[1], "이벤트 처리 절차 (Processing Pipeline)");
+        setList(s4, ".status-label", ["DANGER", "SAFE", "CONN / DISCONN", "MONITOR / CONTROL"]);
+        setList(s4, ".status-desc", [
+          "미인가자/위험 객체 탐지 시 발생\n즉각적인 알림 및 녹화 트리거",
+          "위험 객체 소멸 또는 안전 확인\n이벤트 종료 처리",
+          "카메라/로봇 연결 상태 모니터링\n시스템 가용성 확인",
+          "자동 감시 모드 ↔ 수동 조종 모드\n운영 주체 전환"
+        ]);
+        setList(s4, ".step-title", [
+          "1. 객체 인식 (Detection)",
+          "2. 이벤트 생성 (Create)",
+          "3. 비동기 처리 (Async)",
+          "4. 대응 및 알림 (Action)"
+        ]);
+        const stepPs = s4.querySelectorAll(".step-desc p");
+        const stepTexts = ["RTSP 스트림 분석", "YOLOv8 Inference", "객체 ID 기반 식별", "Unique Event ID 부여", "메시지 큐(Queue) 적재", "Redis Pub/Sub", "증거 저장 & 외부 알림", "Snapshot / Telegram"];
+        stepTexts.forEach((t, i) => setText(stepPs[i], t));
+      }
+
+      const s5 = document.querySelector('section[data-index="5"]');
+      if (s5) {
+        setHTML(s5.querySelector(".header-title"), '<i class="fas fa-star"></i><p>주요 기능 하이라이트</p>');
+        setText(s5.querySelector(".slide-main-title"), "ETRI Lab Guardian System 주요 기능");
+        setText(s5.querySelector(".slide-subtitle"), "증거 확보, 시스템 구조, 운영 편의성을 극대화한 5가지 핵심 기능");
+        setList(s5, ".card-title p", ["스마트 증거 관리", "유연한 연동 구조", "운영 가시성 확보"]);
+        setList(s5, ".feature-strong", ["스마트 증거 기록", "Static Image Server", "모듈화 구조", "Telegram 알림", "Dual-Column Log", "통합 관제 대시보드"]);
+        const fp = s5.querySelectorAll(".feature-item p");
+        const fpt = [
+          "이벤트 발생 시점 스냅샷 및 전후 10초 영상 클립 자동 저장",
+          "정적 파일 서버 구축으로 404 오류 방지 및 안정적 열람",
+          "Algorithm, Gateway, Web 모듈의 독립적 설계로 유지보수 용이",
+          "내부 망과 분리된 안전한 외부 알림 체계 (실시간 시연 예정)",
+          "시스템 로그와 탐지 이벤트를 분리하여 정보 혼선 방지",
+          "원격 로봇 수동 제어 및 다중 카메라 통합 모니터링"
+        ];
+        fpt.forEach((t, i) => setText(fp[i], t));
+        const dt = s5.querySelector(".demo-title p");
+        setText(dt, "실제 시스템 구동 화면 (Live Demo Snapshot)");
+        const note = s5.querySelector(".demo-header .text-xs p");
+        setText(note, "※ 발표 중 실시간 텔레그램 알림 시연 포함");
+      }
+
+      const s6 = document.querySelector('section[data-index="6"]');
+      if (s6) {
+        setHTML(s6.querySelector(".header-title"), '<i class="fas fa-cogs"></i>핵심 기술 의사결정 (Technical Decisions)');
+        const st = s6.querySelectorAll(".section-title");
+        const sd = s6.querySelectorAll(".section-desc");
+        setText(st[0], "연산(Python) vs I/O(C#) 역할 분리");
+        setText(st[1], "Redis Queue + DLQ 기반 비동기 처리");
+        setText(st[2], "대용량 미디어 처리 최적화");
+        setText(st[3], "스트리밍과 이벤트 저장 파이프라인 분리");
+        setHTML(sd[0], 'AI 추론과 같은 무거운 연산은 <span class="text-blue-400 font-bold">Python(FastAPI)</span>이 전담하고, 시스템 제어 및 다중 장치 I/O는 <span class="text-blue-400 font-bold">C#(.NET)</span>이 처리하여 성능 병목을 해소하고 안정성을 확보했습니다.');
+        setHTML(sd[1], '이벤트 발생과 처리를 비동기로 분리하여 시스템 부하를 조절합니다. 처리 실패 메시지는 <span class="text-purple-400 font-bold">DLQ(Dead Letter Queue)</span>로 격리하여 데이터 유실을 방지하고 재시도 메커니즘을 구현했습니다.');
+        setHTML(sd[2], '이미지와 영상 원본은 파일 시스템에 저장하고, 데이터베이스(SQLite)에는 <span class="text-yellow-400 font-bold">파일 경로와 메타데이터</span>만 저장하여 DB 부하를 최소화하고 조회 속도를 향상시켰습니다.');
+        setHTML(sd[3], '평상시 모니터링은 네트워크 대역폭에 맞춰 적정 화질로 스트리밍하되, 이벤트 발생 시에는 <span class="text-green-400 font-bold">최대 해상도</span>로 증거 영상을 별도 저장하여 품질과 효율성을 동시에 달성했습니다.');
+      }
+
+      const s7 = document.querySelector('section[data-index="7"]');
+      if (s7) {
+        setHTML(s7.querySelector(".header-title"), '<i class="fas fa-folder-open"></i><p>모듈 구성 및 폴더 구조</p>');
+        setText(s7.querySelector(".slide-main-title"), "시스템 모듈 구조화");
+        setText(s7.querySelector(".slide-subtitle"), "기능별로 분리된 3개의 핵심 모듈과 주요 구현 파일 구성");
+        const blurb = s7.querySelector(".summary-box p");
+        if (blurb) blurb.innerHTML = '<i class="fas fa-code-branch mr-2"></i><strong>느슨한 결합(Loose Coupling)</strong> 원칙을 적용하여 각 모듈의 독립적인 유지보수와 확장이 가능하도록 설계';
+      }
+
+      const s8 = document.querySelector('section[data-index="8"]');
+      if (s8) {
+        setHTML(s8.querySelector(".header-title"), '<i class="fas fa-tools"></i>운영 최적화 및 트러블슈팅');
+        const t = s8.querySelectorAll(".card-title");
+        if (t[0]) t[0].innerHTML = '<div class="card-icon opt-icon"><i class="fas fa-sliders-h"></i></div>스트리밍 품질 자동 조절';
+        if (t[1]) t[1].innerHTML = '<div class="card-icon"><i class="fas fa-video"></i></div>인코딩 지연 해결';
+        if (t[2]) t[2].innerHTML = '<div class="card-icon"><i class="fas fa-image"></i></div>이미지 404 해결';
+        if (t[3]) t[3].innerHTML = '<div class="card-icon"><i class="fas fa-database"></i></div>DB Lock 방지';
+        const ct = s8.querySelectorAll(".content-text");
+        if (ct[0]) ct[0].innerHTML = '폐쇄망의 제한된 자원 환경에서 네트워크 부하를 최소화하면서도,<br>결정적인 순간에는 <span style="color:#fcd34d;font-weight:700;">고품질 증거 확보</span> 필요';
+        if (ct[1]) ct[1].innerHTML = '평상시 저화질 모니터링 → 이벤트 감지 시 고화질 녹화 전환<br>→ 종료 후 복귀하는 <span style="color:#34d399;font-weight:700;">적응형 스트리밍</span> 전략 적용';
+        if (ct[2]) ct[2].innerHTML = 'RealSense 고해상도 영상을 CPU 기반 H.264로 인코딩 시 <span style="color:#fca5a5;font-weight:700;">심각한 프레임 드랍</span> 발생';
+        if (ct[3]) ct[3].innerHTML = 'GStreamer 파이프라인 재구성:<br><span class="highlight-text">하드웨어 가속 인코딩</span> 적용 및 불필요한 색공간 변환 단계 제거';
+        if (ct[4]) ct[4].innerHTML = '저장 속도보다 요청이 빨라 발생하는 <span style="color:#fca5a5;font-weight:700;">Race Condition</span> (404 Not Found)';
+        if (ct[5]) ct[5].innerHTML = 'FastAPI 내 <span class="highlight-text">독립 정적 파일 서버</span> 구축,<br>클라이언트 재시도 로직 및 캐시 무효화 헤더 적용';
+        if (ct[6]) ct[6].innerHTML = '다수 카메라 프로세스의 동시 접근으로 인한 <span style="color:#fca5a5;font-weight:700;">Database Locked</span> 및 데이터 유실';
+        if (ct[7]) ct[7].innerHTML = '<span class="highlight-text">Redis Queue</span> 도입:<br>DB 쓰기 작업을 단일 워커(Single Worker)가 순차 처리 (Producer-Consumer 패턴)';
+      }
+
+      const s10 = document.querySelector('section[data-index="10"]');
+      if (s10) {
+        setHTML(s10.querySelector(".header-title"), '<i class="fas fa-flag-checkered"></i>결론 및 Q&amp;A');
+        setText(s10.querySelector(".summary-section .section-title"), "연구 기대효과 요약");
+        setList(s10, ".effect-card .card-title", ["보안성 극대화", "운영 효율성 향상", "확장 용이성"]);
+        const cd = s10.querySelectorAll(".effect-card .card-desc");
+        if (cd[0]) cd[0].innerHTML = "폐쇄망 환경의 제약을 준수하며<br/>외부 의존성 없는 <strong>독립적 관제</strong> 실현";
+        if (cd[1]) cd[1].innerHTML = "AI 자동 탐지와 <strong>로봇 원격 검증</strong>의 시너지로<br/>현장 출동 최소화 및 대응 속도 개선";
+        if (cd[2]) cd[2].innerHTML = "모듈화된 아키텍처 설계를 통해<br/>다양한 <strong>산업 현장 및 보안 시스템</strong>에 적용 가능";
+        setText(s10.querySelector(".qna-subtitle"), "질문이 있으시면 자유롭게 말씀해 주세요.");
+        setText(s10.querySelector(".thank-you-msg"), "경청해 주셔서 감사합니다.");
+      }
+    }
+
+    restoreCorruptedText();
+
+    (function setupDemoZoom() {
+      const overlay = document.getElementById("demoZoomOverlay");
+      const zoomImg = document.getElementById("demoZoomImg");
+      if (!overlay || !zoomImg) return;
+      const targets = document.querySelectorAll(".demo-zoom-target");
+      targets.forEach((img) => {
+        img.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const src = img.getAttribute("src");
+          if (src) zoomImg.setAttribute("src", src);
+          overlay.classList.add("active");
+          overlay.setAttribute("aria-hidden", "false");
+        });
+      });
+      overlay.addEventListener("click", () => {
+        overlay.classList.remove("active");
+        overlay.setAttribute("aria-hidden", "true");
+      });
+    })();
+
+    (function fit() {
+      const wrap = document.getElementById("scaleWrap");
+      const W = 1280;
+      const H = 720;
+      function resize() {
+        const vw = window.innerWidth;
+        const vh = window.innerHeight;
+        const raw = Math.min(vw / W, vh / H);
+        const dpr = window.devicePixelRatio || 1;
+        const snapped = Math.floor(raw * dpr) / dpr;
+        const s = snapped > 0 ? snapped : raw;
+        wrap.style.transform = `translateZ(0) scale(${s})`;
+      }
+      window.addEventListener("resize", resize);
+      document.addEventListener("fullscreenchange", resize);
+      resize();
+    })();
+
+    const slides = Array.from(document.querySelectorAll(".slide"));
+    let idx = 0;
+
+    function show(i) {
+      idx = Math.max(0, Math.min(slides.length - 1, i));
+      slides.forEach((s, k) => s.classList.toggle("active", k === idx));
+      updateHelp();
+    }
+    function next() { show(idx + 1); }
+    function prev() { show(idx - 1); }
+
+    document.getElementById("btnNext").addEventListener("click", next);
+    document.getElementById("btnPrev").addEventListener("click", prev);
+
+    function toggleFullscreen() {
+      const el = document.documentElement;
+      if (!document.fullscreenElement) el.requestFullscreen?.();
+      else document.exitFullscreen?.();
+    }
+
+    function updateHelp() {
+      const help = document.getElementById("kbdHelp");
+      const maxJump = Math.min(9, slides.length);
+      help.textContent = `←/→ 이동 · 숫자(1~${maxJump}) 점프 · Home/End · Esc 전체화면 · ${idx + 1}/${slides.length}`;
+    }
+    updateHelp();
+
+    window.addEventListener("keydown", (e) => {
+      const key = e.key;
+      if (key === "ArrowRight" || key === "PageDown" || key === " ") { e.preventDefault(); next(); return; }
+      if (key === "ArrowLeft" || key === "PageUp") { e.preventDefault(); prev(); return; }
+      if (key === "Home") { e.preventDefault(); show(0); return; }
+      if (key === "End") { e.preventDefault(); show(slides.length - 1); return; }
+      if (key === "Escape") { e.preventDefault(); toggleFullscreen(); return; }
+      if (/^[1-9]$/.test(key)) {
+        const target = parseInt(key, 10) - 1;
+        if (target < slides.length) { e.preventDefault(); show(target); }
+      }
+    });
+  </script>
+</body>
+</html>
