@@ -1,6 +1,6 @@
 ﻿# 🛡️ ETRI Lab Guardian System
-> **AI 기반 다중 로봇 및 CCTV 통합 실험실 안전 관제 시스템**
-> <br/>(AI-Powered Multi-Robot & CCTV Laboratory Safety Monitoring System)
+> **AI 기반 객체 인식 및 로봇 원격 대응을 위한 로봇·카메라 통합 시스템의 설계, 구현 및 운영**
+> <br/>(Design, Implementation, and Operation of an AI-Based Integrated Robot–Camera System for Object Recognition and Remote Robotic Response)
 
 <div align="center">
 
@@ -20,11 +20,19 @@
 ---
 
 ## 📖 Project Overview
-**Lab Guardian**은 위험한 실험실 환경을 순찰하는 자율 주행 로봇(Raspbot)과 고정형 CCTV를 통합 관리하는 시스템입니다. AI 객체 탐지를 통해 위험 상황을 실시간 감지하며, **전용 C# 게이트웨이**를 통해 모든 보안 이벤트를 데이터베이스에 체계적으로 기록합니다.
 
-특히, 최신 업데이트를 통해 **자동 증거 확보(스냅샷/녹화)** 및 **텔레그램 실시간 알림** 기능을 탑재하여 관제 효율을 극대화했습니다. 또한 연산(탐지/추적)은 **Python 알고리즘 서버**, I/O(로그 저장)는 **C# 게이트웨이**로 역할을 분리해 병목을 완화했습니다.
+**Lab Guardian**는 폐쇄망 환경에서 동작하는 **AI 기반 객체 인식 및 로봇 원격 대응을 위한 로봇·카메라 통합 시스템**입니다.  
+고정형 CCTV와 이동형 로봇(Raspbot)을 통합 관리하며, AI 객체 인식을 통해 위험 상황을 실시간으로 탐지하고 **관리자가 웹 대시보드에서 로봇 영상을 확인하며 원격 수동 조종으로 현장을 확인**할 수 있도록 설계되었습니다.
 
-### ✨ 핵심 업데이트 기능 (New Features)
+본 시스템은 **AI 탐지·추적과 같은 연산 집약적 작업은 Python 기반 알고리즘 서버(FastAPI)** 에서 수행하고, **이벤트 수신·저장·브로드캐스트와 같은 I/O 중심 처리는 C# 기반 게이트웨이 서버**에서 전담하도록 역할을 분리하여 실시간 환경에서의 병목과 지연을 최소화했습니다.
+
+또한 위험 상황 감지 시 **스냅샷 및 일정 구간 영상 녹화를 통한 자동 증거 확보**를 수행하며, 저장된 증거 자료는 로컬 스토리지에 보관되어 웹 대시보드에서 URL로 즉시 확인할 수 있습니다.  
+외부 통신이 필요한 **텔레그램 실시간 알림 기능**은 폐쇄망 환경의 보안 정책을 고려하여 내부 시스템과 분리된 네트워크에서 우회적으로 연동되도록 설계되었습니다.
+
+실제 통합 테스트는 **로봇 1대를 대상으로 수행**되었으며, 카메라와 동일한 방식의 장치 등록 구조를 적용하여 **향후 다수의 로봇 및 카메라로 확장 가능한 구조**를 갖추고 있습니다.
+
+
+### ✨ Key System Features
 * **📸 Smart Evidence Recording:** 위험 감지 시 **즉시 스냅샷**을 촬영하고 **10초간 영상을 녹화**하여 로컬 스토리지에 자동 저장.
 * **🖼️ Static Image Server:** FastAPI의 `StaticFiles`를 활용해 저장된 증거 자료를 웹 브라우저에서 URL 링크로 즉시 확인 가능한 이미지 서버 구축.
 * **📱 Real-time Telegram Alert:** 침입자 감지 시 보안 담당자의 텔레그램으로 현장 사진과 경고 메시지를 즉시 전송 (방화벽 우회 처리 적용).
@@ -41,26 +49,59 @@
 ### 1. High-Level Architecture
 
 ```mermaid
-graph TD
-    subgraph "Edge Devices & AI Core"
-        A["🤖 Raspbot"] -- "Video Stream" --> C
-        B["📷 RealSense/CCTV"] -- "Video Stream" --> C
-        C["🧠 Algo Server (FastAPI)"]
-        C -- "Save MP4/JPG" --> S["📂 Local Storage (recordings/)"]
-        C -- "Send Photo" --> T["📱 Telegram Bot"]
-    end
+graph LR
+  %% =========================
+  %% Layers
+  %% =========================
+  subgraph EDGE["Edge Devices"]
+    R["Robot (Raspbot)"]
+    CAM["CCTV / USB / RealSense"]
+  end
 
-    subgraph "Data & Control Hub"
-        C -- "TCP (Log + Image Path)" --> G["🚀 C# Gateway"]
-        G -- "Insert Metadata" --> DB[("SQLite DB")]
-        G -- "WebSocket (JSON)" --> F
-    end
+  subgraph AI["AI Compute Layer (Closed Network)"]
+    A["Algorithm Server\n(FastAPI + YOLOv8)"]
+  end
 
-    subgraph "Control Center"
-        F["💻 React Web"] -- "View Stream" --> C
-        F -- "Fetch Image" --> S
-        F -- "Direct Control" --> A
-    end
+  subgraph DATA["Data & I/O Layer (Closed Network)"]
+    G["C# Gateway"]
+    Q["Redis Queue / DLQ\n(OK → SQLite, Fail → DLQ)"]
+    DB["SQLite\n(Metadata Only)"]
+    S["Local Storage\n(recordings/)"]
+  end
+
+  subgraph UI["Control & Monitoring"]
+    W["Web Dashboard\n(React)"]
+  end
+
+  subgraph EXT["External Services (Isolated Network)"]
+    T["Telegram"]
+  end
+
+  %% =========================
+  %% Data Flows (thick line style via Mermaid class)
+  %% =========================
+  R -->|Video Stream| A
+  CAM -->|Video Stream| A
+
+  A -->|Event TCP| G
+  A -->|Snapshot / Video| S
+
+  G --> Q
+  Q -->|OK| DB
+
+  G -->|WebSocket JSON| W
+
+  %% =========================
+  %% Control / Request Flows
+  %% =========================
+  W -->|View Stream| A
+  W -->|Manual Control| R
+  W -->|Fetch Image HTTP| S
+
+  %% =========================
+  %% External (dashed)
+  %% =========================
+  A -.->|Alert| T
 ```
 
 ---
@@ -95,6 +136,32 @@ graph TD
 
 ### 3. C# 기반 통합 게이트웨이
 데이터 무결성을 위해 멀티스레딩에 강한 C#으로 게이트웨이를 구축했습니다. Python에서 TCP로 전송한 `ID:메시지:이미지경로` 형태의 패킷을 파싱하여, 경로가 존재할 경우에만 DB의 `SnapshotPath` 컬럼에 기록하도록 설계되었습니다.
+
+### 4. Redis Queue / DLQ 기반 이벤트 처리 구조
+
+본 시스템은 실시간 객체 탐지 및 다중 장치 환경에서 발생하는 이벤트를 안정적으로 처리하기 위해  
+**Redis Queue + DLQ(Dead Letter Queue)** 기반의 이벤트 처리 구조를 채택했습니다.
+
+알고리즘 서버(Python)는 객체 탐지 결과 및 상태 변화를 **TCP 이벤트 메시지** 형태로 C# 게이트웨이에 전송합니다.  
+게이트웨이는 이벤트를 즉시 데이터베이스에 기록하지 않고, **Redis Queue에 먼저 적재**한 뒤 순차적으로 처리합니다.
+
+이벤트 처리 흐름은 다음과 같습니다.
+
+- **정상 처리 이벤트**
+  - Redis Queue → SQLite DB 메타데이터 저장
+  - 동시에 WebSocket을 통해 웹 대시보드로 실시간 브로드캐스트
+
+- **처리 실패 이벤트**
+  - 네트워크 오류, DB Lock, WebSocket 전송 실패 등 예외 발생 시
+  - 해당 이벤트를 **Redis DLQ(Dead Letter Queue)** 로 이동
+
+DLQ에 적재된 이벤트는 운영자가 관리 API를 통해 조회할 수 있으며,  
+문제 해결 이후 **수동 재처리(replay)** 가 가능하도록 설계되었습니다.  
+이를 통해 순간적인 장애나 부하 상황에서도 **이벤트 유실을 최소화하고 복구 가능성**을 확보했습니다.
+
+이 구조는 SQLite 기반 경량 DB 환경에서 발생할 수 있는 동시 쓰기 지연 문제를 완화하고,  
+실시간 시스템에서 요구되는 **안정성과 운영 신뢰성**을 확보하는 데 핵심적인 역할을 합니다.
+
 
 ---
 
