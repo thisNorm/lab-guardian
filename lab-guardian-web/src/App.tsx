@@ -8,6 +8,7 @@ type Quality = "FHD" | "HD" | "SD";
 type EventType = "danger" | "safe" | "conn" | "disconn";
 type Dir = "up" | "down" | "left" | "right" | "none";
 type SourceType = "USB" | "RTSP";
+type AddTargetType = "robot" | "cctv";
 
 interface CameraItem {
   id: string;
@@ -39,6 +40,14 @@ interface TimelineEvent {
   type: EventType;
 }
 
+interface GatewayRealtimePayload {
+  status?: string;
+  camId?: string;
+  message?: string;
+  time?: string;
+  snapshot?: string | null;
+}
+
 interface NewCameraForm {
   camId: string;
   sourceType: SourceType;
@@ -49,8 +58,22 @@ interface NewCameraForm {
   rtspPath: string;
 }
 
+const isRobotDevice = (cam?: CameraItem | null) =>
+  !!cam && (cam.id.toUpperCase().includes("ROBOT") || cam.name.toUpperCase().includes("ROBOT"));
+
 const ROOT_IP = NETWORK_CONFIG.PC_IP;
 const QUALITY_OPTIONS: Quality[] = ["FHD", "HD", "SD"];
+const FIXED_GRID_SIZE = 3;
+const FIXED_GRID_LEN = FIXED_GRID_SIZE * FIXED_GRID_SIZE;
+
+const STORAGE_KEYS = {
+  tree: "lg_service_tree",
+  selectedTreeId: "lg_selected_tree_id",
+  folderAssignments: "lg_folder_assignments",
+  cameras: "lg_cameras",
+  markers: "lg_markers",
+  timelineEvents: "lg_timeline_events",
+};
 
 const INITIAL_NEW_CAMERA_FORM: NewCameraForm = {
   camId: "",
@@ -62,16 +85,40 @@ const INITIAL_NEW_CAMERA_FORM: NewCameraForm = {
   rtspPath: "stream1",
 };
 
-const DEFAULT_CAMERAS: CameraItem[] = [
-  {
-    id: "CCTV_RealSense_999",
-    name: "CCTV_RealSense_999",
-    status: "online",
-    quality: "HD",
-    sourceType: "USB",
-    sourceLabel: "USB/CCTV_RealSense_999",
-  },
-];
+const QUALITY_STREAM_CONFIG: Record<Quality, { width: number; height: number; fps: number; quality: number; label: string }> = {
+  FHD: { width: 1280, height: 720, fps: 20, quality: 88, label: "FHD" },
+  HD: { width: 960, height: 540, fps: 14, quality: 68, label: "HD" },
+  SD: { width: 480, height: 270, fps: 8, quality: 48, label: "SD" },
+};
+
+const DEFAULT_CAMERAS: CameraItem[] = [];
+
+const canonicalDeviceId = (raw: string): string => {
+  const id = (raw || "").trim().replace(/^USB\//i, "");
+  const upper = id.toUpperCase();
+  if (upper === "ROBOT_1" || upper === "ROBOT1" || upper === "ROBOT") return "ROBOT_1";
+  if (
+    upper === "CCTV_REALSENSE_999" ||
+    upper === "REALSENSE" ||
+    upper === "CCTV_REALSENSE" ||
+    upper === "CCTV_REALSENSE999"
+  ) {
+    return "CCTV_RealSense_999";
+  }
+  return id;
+};
+
+const sameDeviceId = (a?: string | null, b?: string | null) =>
+  canonicalDeviceId(a || "").toUpperCase() === canonicalDeviceId(b || "").toUpperCase();
+
+const normalizeCameraItem = (cam: CameraItem): CameraItem => {
+  const nextId = canonicalDeviceId(cam.id);
+  const nextName = /realsense/i.test(cam.name) ? "CCTV_RealSense_999" : cam.name;
+  const nextUsbLabel = /USB\//i.test(cam.sourceLabel)
+    ? cam.sourceLabel.replace(/realsense/gi, "CCTV_RealSense_999")
+    : cam.sourceLabel;
+  return { ...cam, id: nextId, name: nextName, sourceLabel: nextUsbLabel };
+};
 
 const EVENT_COLOR: Record<EventType, string> = {
   danger: "#ff5f6d",
@@ -89,6 +136,24 @@ const MARKER_PRESETS = [
   { x: 42, y: 38, angle: 90 },
 ];
 
+const mapGatewayStatusToEventType = (status?: string, message?: string): EventType | null => {
+  const normalized = (status || "").trim().toUpperCase();
+  if (normalized === "DANGER") return "danger";
+  if (normalized === "SAFE") return "safe";
+  if (normalized === "CONNECTED") return "conn";
+  if (normalized === "DISCONNECTED") return "disconn";
+  if (normalized === "FORCED_DISCONNECTED") return "disconn";
+  const msg = (message || "").toUpperCase();
+  if (msg.includes("[DANGER]")) return "danger";
+  if (msg.includes("[SAFE]")) return "safe";
+  if (msg.includes("[CONNECTED]")) return "conn";
+  if (msg.includes("[DISCONNECTED]")) return "disconn";
+  if (msg.includes("[FORCED_DISCONNECTED]")) return "disconn";
+  if (msg.includes("연결 성공")) return "conn";
+  if (msg.includes("연결 끊김")) return "disconn";
+  return null;
+};
+
 const INITIAL_TREE: FolderNode = {
   id: "root",
   label: `🏠 [${ROOT_IP}]`,
@@ -101,8 +166,17 @@ const INITIAL_TREE: FolderNode = {
   ],
 };
 
-const FIXED_GRID_SIZE = 3;
-const FIXED_GRID_LEN = FIXED_GRID_SIZE * FIXED_GRID_SIZE;
+const makeEmptyGridAssignments = (): (string | null)[] =>
+  Array.from({ length: FIXED_GRID_LEN }, () => null);
+
+const parseJson = <T,>(raw: string | null, fallback: T): T => {
+  if (!raw) return fallback;
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return fallback;
+  }
+};
 
 const findNodeById = (node: FolderNode, id: string): FolderNode | null => {
   if (node.id === id) return node;
@@ -135,25 +209,79 @@ const removeFolderNode = (node: FolderNode, targetId: string): FolderNode => {
   };
 };
 
+const addChildFolderNode = (node: FolderNode, targetId: string, child: FolderNode): FolderNode => {
+  if (node.id === targetId) {
+    return { ...node, children: [...node.children, child] };
+  }
+  return {
+    ...node,
+    children: node.children.map((n) => addChildFolderNode(n, targetId, child)),
+  };
+};
+
+const collectFolderIds = (node: FolderNode): string[] => {
+  const ids = [node.id];
+  for (const child of node.children) ids.push(...collectFolderIds(child));
+  return ids;
+};
+
 function App() {
-  const [cameras, setCameras] = useState<CameraItem[]>(DEFAULT_CAMERAS);
-  const [tree, setTree] = useState<FolderNode>(INITIAL_TREE);
-  const [selectedTreeId, setSelectedTreeId] = useState<string>("branch-01");
-
-  const [timelineEvents, setTimelineEvents] = useState<TimelineEvent[]>([]);
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [addError, setAddError] = useState("");
-  const [newCamera, setNewCamera] = useState<NewCameraForm>(INITIAL_NEW_CAMERA_FORM);
-
-  const [gridAssignments, setGridAssignments] = useState<(string | null)[]>(() => {
-    const base = Array.from({ length: FIXED_GRID_LEN }, () => null) as (string | null)[];
-    if (DEFAULT_CAMERAS.length > 0) base[0] = DEFAULT_CAMERAS[0].id;
-    return base;
+  const [cameras, setCameras] = useState<CameraItem[]>(() => {
+    const raw = localStorage.getItem(STORAGE_KEYS.cameras);
+    if (raw !== null) {
+      return parseJson<CameraItem[]>(raw, []).map(normalizeCameraItem);
+    }
+    return DEFAULT_CAMERAS.map(normalizeCameraItem);
+  });
+  const [tree, setTree] = useState<FolderNode>(() =>
+    parseJson<FolderNode>(localStorage.getItem(STORAGE_KEYS.tree), INITIAL_TREE)
+  );
+  const [selectedTreeId, setSelectedTreeId] = useState<string>(() =>
+    localStorage.getItem(STORAGE_KEYS.selectedTreeId) || "branch-01"
+  );
+  const [folderAssignments, setFolderAssignments] = useState<Record<string, (string | null)[]>>(() => {
+    const fallback: Record<string, (string | null)[]> = {
+      "branch-01": makeEmptyGridAssignments(),
+    };
+    if (DEFAULT_CAMERAS.length > 0) fallback["branch-01"][0] = DEFAULT_CAMERAS[0].id;
+    const stored = parseJson<Record<string, (string | null)[]>>(
+      localStorage.getItem(STORAGE_KEYS.folderAssignments),
+      fallback
+    );
+    const next: Record<string, (string | null)[]> = {};
+    for (const [folderId, list] of Object.entries(stored)) {
+      next[folderId] = list.map((id) => (id ? canonicalDeviceId(id) : null));
+    }
+    if (!next["branch-01"]) next["branch-01"] = fallback["branch-01"];
+    return next;
   });
 
+  const [timelineEvents, setTimelineEvents] = useState<TimelineEvent[]>(() =>
+    parseJson<TimelineEvent[]>(localStorage.getItem(STORAGE_KEYS.timelineEvents), [])
+      .map((e) => ({ ...e, cameraId: canonicalDeviceId(e.cameraId) }))
+  );
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [showMapPlacementModal, setShowMapPlacementModal] = useState(false);
+  const [pendingMapPlacementCamId, setPendingMapPlacementCamId] = useState<string | null>(null);
+  const [addError, setAddError] = useState("");
+  const [newCamera, setNewCamera] = useState<NewCameraForm>(INITIAL_NEW_CAMERA_FORM);
+  const [addTarget, setAddTarget] = useState<AddTargetType>("cctv");
+  const controlsLocked = showAddModal || showMapPlacementModal;
+
   const gridSize = FIXED_GRID_SIZE;
+  const gridAssignments = useMemo(
+    () => folderAssignments[selectedTreeId] ?? makeEmptyGridAssignments(),
+    [folderAssignments, selectedTreeId]
+  );
 
   const [markers, setMarkers] = useState<MapMarker[]>(() => {
+    const raw = localStorage.getItem(STORAGE_KEYS.markers);
+    if (raw !== null) {
+      return parseJson<MapMarker[]>(raw, []).map((m) => ({
+        ...m,
+        cameraId: canonicalDeviceId(m.cameraId),
+      }));
+    }
     if (DEFAULT_CAMERAS.length === 0) return [];
     const preset = MARKER_PRESETS[0];
     return [{
@@ -174,8 +302,14 @@ function App() {
 
   const [singleViewCam, setSingleViewCam] = useState<string | null>(null);
   const [focusedCamId, setFocusedCamId] = useState<string | null>(DEFAULT_CAMERAS[0]?.id ?? null);
+  const [streamRetryMap, setStreamRetryMap] = useState<Record<string, number>>({});
+  const [streamUiStatus, setStreamUiStatus] = useState<Record<string, CamStatus>>({});
+  const camerasRef = useRef<CameraItem[]>([]);
+  const uiSessionIdRef = useRef<string>("");
+  const lastRetryAtRef = useRef<Record<string, number>>({});
 
   const robotSocketRef = useRef<Socket | null>(null);
+  const gatewayWsRef = useRef<WebSocket | null>(null);
   const [robotConnected, setRobotConnected] = useState(false);
   const [moveSpeed, setMoveSpeed] = useState(3);
   const [camSpeed, setCamSpeed] = useState(3);
@@ -192,13 +326,80 @@ function App() {
   const keyboardCamDirRef = useRef<Dir>("none");
 
   const cameraMap = useMemo(() => new Map(cameras.map((c) => [c.id, c])), [cameras]);
+  const cameraIdKey = useMemo(
+    () => cameras.map((c) => canonicalDeviceId(c.id)).sort().join("|"),
+    [cameras]
+  );
+  const focusedCam = focusedCamId ? cameraMap.get(focusedCamId) ?? null : null;
+  const focusedCamSlots = useMemo(() => {
+    if (!focusedCamId) return [] as number[];
+    const slots: number[] = [];
+    gridAssignments.forEach((camId, idx) => {
+      if (camId === focusedCamId) slots.push(idx + 1);
+    });
+    return slots;
+  }, [focusedCamId, gridAssignments]);
+
+  const buildStreamUrl = (camId: string) => {
+    const normalizedCamId = canonicalDeviceId(camId);
+    const retry = streamRetryMap[normalizedCamId] ?? 0;
+    return `${NETWORK_CONFIG.ALGO_API_URL}/video_feed/${encodeURIComponent(normalizedCamId)}?r=${retry}`;
+  };
+
+  const bumpStreamRetry = (camId: string) => {
+    setStreamRetryMap((prev) => ({ ...prev, [camId]: (prev[camId] ?? 0) + 1 }));
+  };
+
+  const bumpStreamRetryThrottled = (camId: string) => {
+    const now = Date.now();
+    const last = lastRetryAtRef.current[camId] ?? 0;
+    if (now - last < 1200) return;
+    lastRetryAtRef.current[camId] = now;
+    bumpStreamRetry(camId);
+  };
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.tree, JSON.stringify(tree));
+  }, [tree]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.selectedTreeId, selectedTreeId);
+  }, [selectedTreeId]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.folderAssignments, JSON.stringify(folderAssignments));
+  }, [folderAssignments]);
+
+  useEffect(() => {
+    camerasRef.current = cameras;
+  }, [cameras]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.cameras, JSON.stringify(cameras));
+  }, [cameraIdKey]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.markers, JSON.stringify(markers));
+  }, [markers]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.timelineEvents, JSON.stringify(timelineEvents));
+  }, [timelineEvents]);
+
+  useEffect(() => {
+    if (!findNodeById(tree, selectedTreeId)) {
+      setSelectedTreeId("branch-01");
+    }
+  }, [selectedTreeId, tree]);
 
   useEffect(() => {
     const socket = io(`http://${NETWORK_CONFIG.ROBOT_IP}:5001`, {
-      transports: ["websocket"],
+      // Do not force websocket only; allow polling fallback for unstable networks.
       reconnection: true,
-      reconnectionAttempts: 5,
-      timeout: 2500,
+      reconnectionAttempts: 20,
+      reconnectionDelay: 800,
+      reconnectionDelayMax: 5000,
+      timeout: 5000,
     });
 
     socket.on("connect", () => setRobotConnected(true));
@@ -213,8 +414,94 @@ function App() {
     };
   }, []);
 
+  useEffect(() => {
+    const ws = new WebSocket(`ws://${NETWORK_CONFIG.PC_IP}:8080`);
+    gatewayWsRef.current = ws;
+
+    ws.onmessage = (event) => {
+      let payload: GatewayRealtimePayload | null = null;
+      try {
+        payload = JSON.parse(String(event.data)) as GatewayRealtimePayload;
+      } catch {
+        return;
+      }
+
+      const cameraId = canonicalDeviceId(payload?.camId || "");
+      const type = mapGatewayStatusToEventType(payload?.status, payload?.message);
+      if (!cameraId || !type) return;
+
+      const hour = new Date().getHours();
+      setTimelineEvents((prev) => [
+        { id: `ev-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, cameraId, hour, type },
+        ...prev.slice(0, 1499),
+      ]);
+
+      if (type === "disconn") {
+        setStreamUiStatus((prev) => ({ ...prev, [cameraId]: "offline" }));
+      }
+
+      // If reconnect happened after a transient drop, force one stream refresh.
+      if (type === "conn") bumpStreamRetryThrottled(cameraId);
+    };
+
+    return () => {
+      ws.close();
+      gatewayWsRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    const existing = sessionStorage.getItem("lg_ui_session_id");
+    if (existing) uiSessionIdRef.current = existing;
+    else {
+      const id = `ui-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+      uiSessionIdRef.current = id;
+      sessionStorage.setItem("lg_ui_session_id", id);
+    }
+
+    const sendHeartbeat = () => {
+      const sessionId = uiSessionIdRef.current;
+      if (!sessionId) return;
+      const cameraIds = camerasRef.current.map((c) => canonicalDeviceId(c.id));
+      fetch(`${NETWORK_CONFIG.ALGO_API_URL}/ui/session/heartbeat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          session_id: sessionId,
+          camera_ids: cameraIds,
+        }),
+      }).catch(() => {});
+    };
+
+    void sendHeartbeat();
+    const timer = window.setInterval(sendHeartbeat, 2000);
+    return () => window.clearInterval(timer);
+  }, []);
+
   const emitControl = (command: string, type: "down" | "up", speed: number) => {
-    robotSocketRef.current?.emit("direct_control", { command, type, speed });
+    // Keep compatibility with robot server command format:
+    // move: w/a/s/d, camera: arrowup/arrowdown/arrowleft/arrowright
+    const mapped = (() => {
+      if (command.startsWith("cam_")) {
+        const dir = command.replace("cam_", "");
+        const camMap: Record<string, string> = {
+          up: "arrowup",
+          down: "arrowdown",
+          left: "arrowleft",
+          right: "arrowright",
+        };
+        return camMap[dir] || command;
+      }
+      const moveMap: Record<string, string> = {
+        up: "w",
+        down: "s",
+        left: "a",
+        right: "d",
+      };
+      return moveMap[command] || command;
+    })();
+
+    robotSocketRef.current?.emit("direct_control", { command: mapped, type, speed });
   };
 
   const knobFromDir = (dir: Dir) => {
@@ -279,7 +566,15 @@ function App() {
   };
 
   useEffect(() => {
+    const isTypingElement = (target: EventTarget | null) => {
+      const el = target as HTMLElement | null;
+      if (!el) return false;
+      const tag = el.tagName;
+      return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || el.isContentEditable;
+    };
+
     const onKeyDown = (e: KeyboardEvent) => {
+      if (controlsLocked || isTypingElement(e.target)) return;
       const key = e.key.toLowerCase();
       const moveMapping: Record<string, Dir> = {
         w: "up",
@@ -321,6 +616,7 @@ function App() {
     };
 
     const onKeyUp = (e: KeyboardEvent) => {
+      if (controlsLocked || isTypingElement(e.target)) return;
       const key = e.key.toLowerCase();
       const moveMapping: Record<string, Dir> = {
         w: "up",
@@ -381,14 +677,15 @@ function App() {
       window.removeEventListener("keyup", onKeyUp);
       window.removeEventListener("blur", onBlur);
     };
-  }, [camSpeed, moveSpeed]);
+  }, [camSpeed, moveSpeed, controlsLocked]);
 
   const onDropToCell = (toIndex: number) => {
     const payload = dragPayloadRef.current;
     if (!payload) return;
 
-    setGridAssignments((prev) => {
-      const next = [...prev];
+    setFolderAssignments((prevMap) => {
+      const current = prevMap[selectedTreeId] ?? makeEmptyGridAssignments();
+      const next = [...current];
       const { cameraId, fromIndex } = payload;
 
       const existingIdx = next.findIndex((x) => x === cameraId);
@@ -402,7 +699,7 @@ function App() {
         next[toIndex] = cameraId;
       }
 
-      return next;
+      return { ...prevMap, [selectedTreeId]: next };
     });
 
     dragPayloadRef.current = null;
@@ -423,6 +720,34 @@ function App() {
 
   const handleMapClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if ((e.target as HTMLElement).dataset.marker === "1") return;
+    if (!pendingMapPlacementCamId) return;
+
+    const p = toMapCoord(e.clientX, e.clientY);
+    const camId = pendingMapPlacementCamId;
+    const markerId = `m-${camId}`;
+    const hasExisting = markers.some((m) => m.id === markerId);
+
+    setMarkers((prev) => {
+      if (hasExisting) {
+        return prev.map((m) => (m.id === markerId ? { ...m, x: p.x, y: p.y } : m));
+      }
+      return [
+        ...prev,
+        {
+          id: markerId,
+          cameraId: camId,
+          x: p.x,
+          y: p.y,
+          angle: 0,
+        },
+      ];
+    });
+
+    setSelectedMarkerId(markerId);
+    setFocusedCamId(camId);
+    setSelectedMapCam(camId);
+    setPendingMapPlacementCamId(null);
+    setShowMapPlacementModal(false);
   };
 
   useEffect(() => {
@@ -448,11 +773,10 @@ function App() {
   }, []);
 
   const openAddCameraModal = () => {
-    const nextNum = cameras.length + 1;
-    const suggestedId = `CCTV_${String(nextNum).padStart(2, "0")}`;
+    setAddTarget("cctv");
     setShowAddModal(true);
     setAddError("");
-    setNewCamera({ ...INITIAL_NEW_CAMERA_FORM, camId: suggestedId });
+    setNewCamera({ ...INITIAL_NEW_CAMERA_FORM, camId: "" });
   };
 
   const closeAddCameraModal = () => {
@@ -460,20 +784,59 @@ function App() {
     setAddError("");
   };
 
+  const applyStreamConfig = async (camId: string, q: Quality) => {
+    const cfg = QUALITY_STREAM_CONFIG[q];
+    try {
+      await fetch(`${NETWORK_CONFIG.ALGO_API_URL}/streams/config/${camId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(cfg),
+      });
+    } catch {
+      // Keep UI responsive even if stream tuning API is unreachable.
+    }
+  };
+
+  useEffect(() => {
+    cameras.forEach((cam) => {
+      void applyStreamConfig(cam.id, cam.quality);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cameras.length]);
+
   const addCamera = async () => {
-    const sourceType = newCamera.sourceType;
-    const camId = newCamera.camId.trim();
+    const sourceType: SourceType = addTarget === "robot" ? "USB" : newCamera.sourceType;
+    const typedCamId = newCamera.camId.trim();
+    const usbDeviceNameRaw = newCamera.usbDeviceName.trim();
+    const usbDeviceName = usbDeviceNameRaw.replace(/^USB\//i, "").trim();
+
+    // USB/ROBOT: use USB device name as camera ID. RTSP: use explicit camera ID.
+    const idSeed = sourceType === "USB" ? usbDeviceName : typedCamId;
+    if (!idSeed) {
+      if (sourceType === "USB") {
+        setAddError(addTarget === "robot" ? "로봇 USB 장치명을 입력하세요." : "USB 장치명을 입력하세요.");
+      } else {
+        setAddError("RTSP 카메라 ID를 입력하세요.");
+      }
+      return;
+    }
+
+    let camId = canonicalDeviceId(idSeed);
+    // Keep stable IDs for built-in USB templates so upstream frame uploader IDs match.
+    if (addTarget === "robot") camId = camId || "ROBOT_1";
+    if (addTarget === "cctv" && sourceType === "USB" && /realsense/i.test(camId || newCamera.displayName || usbDeviceName)) {
+      camId = "CCTV_RealSense_999";
+    }
     const displayName = newCamera.displayName.trim();
-    const usbDeviceName = newCamera.usbDeviceName.trim();
     const rtspIp = newCamera.rtspIp.trim();
     const rtspPort = (newCamera.rtspPort.trim() || "554").replace(/[^\d]/g, "");
     const rtspPath = newCamera.rtspPath.trim() || "stream1";
 
     if (!camId) {
-      setAddError("카메라 ID를 입력하세요. (예: CCTV_RealSense_999)");
+      setAddError(sourceType === "USB" ? "USB 장치명을 입력하세요." : "RTSP 카메라 ID를 입력하세요.");
       return;
     }
-    if (cameras.some((c) => c.id === camId)) {
+    if (cameras.some((c) => sameDeviceId(c.id, camId))) {
       setAddError("이미 등록된 카메라 ID입니다.");
       return;
     }
@@ -511,7 +874,6 @@ function App() {
 
     const nextNum = cameras.length + 1;
     const id = camId;
-    const preset = MARKER_PRESETS[(nextNum - 1) % MARKER_PRESETS.length];
     const fallbackName = `신규 CCTV ${String(nextNum).padStart(2, "0")}`;
 
     const cameraName = sourceType === "USB"
@@ -525,45 +887,84 @@ function App() {
     const newCam: CameraItem = {
       id,
       name: cameraName,
-      status: "online",
-      quality: "HD",
+      status: "offline",
+      quality: "SD",
       sourceType,
       sourceLabel,
     };
 
     setCameras((prev) => [...prev, newCam]);
+    setStreamUiStatus((prev) => ({ ...prev, [canonicalDeviceId(id)]: "offline" }));
     setSelectedMapCam(id);
     setFocusedCamId(id);
-    setSelectedMarkerId(`m-${id}`);
+    setSelectedMarkerId(null);
 
-    setMarkers((prev) => [
-      ...prev,
-      {
-        id: `m-${id}`,
-        cameraId: id,
-        x: preset.x,
-        y: preset.y,
-        angle: preset.angle,
-      },
-    ]);
+    // Connection timeline/status should be driven by realtime gateway events,
+    // not by local optimistic UI state.
 
-    const hour = new Date().getHours();
-    setTimelineEvents((prev) => [
-      { id: `ev-${Date.now()}`, cameraId: id, hour, type: "conn" },
-      ...prev,
-    ]);
-
-    setGridAssignments((prev) => {
-      const firstEmpty = prev.findIndex((x) => x === null);
-      if (firstEmpty >= 0) {
-        const next = [...prev];
-        next[firstEmpty] = id;
-        return next;
-      }
-      return prev;
+    setFolderAssignments((prevMap) => {
+      const current = prevMap[selectedTreeId] ?? makeEmptyGridAssignments();
+      const next = [...current];
+      const firstEmpty = next.findIndex((x) => x === null);
+      if (firstEmpty >= 0) next[firstEmpty] = id;
+      return { ...prevMap, [selectedTreeId]: next };
     });
 
     closeAddCameraModal();
+    void applyStreamConfig(id, "SD");
+    // Ensure monitoring state is enabled for newly attached device.
+    // (streaming itself can still run without detection, but this keeps behavior consistent)
+    void fetch(`${NETWORK_CONFIG.ALGO_API_URL}/monitoring/start/${id}`, { method: "POST" }).catch(() => {});
+    // Warm-up retries: some USB/robot feeds publish a bit later than first mount.
+    window.setTimeout(() => bumpStreamRetryThrottled(id), 1200);
+    window.setTimeout(() => bumpStreamRetryThrottled(id), 3500);
+    setPendingMapPlacementCamId(id);
+    setShowMapPlacementModal(true);
+  };
+
+  const disconnectCamera = async (cameraId: string) => {
+    const target = cameraMap.get(cameraId);
+    if (!target) return;
+
+    // Optimistic UI cleanup first so "해제" responds immediately even if API is slow/unreachable.
+    const hour = new Date().getHours();
+    setTimelineEvents((prev) => [
+      { id: `ev-${Date.now()}`, cameraId: canonicalDeviceId(cameraId), hour, type: "disconn" },
+      ...prev.filter((e) => !sameDeviceId(e.cameraId, cameraId)),
+    ]);
+
+    setCameras((prev) => prev.filter((cam) => cam.id !== cameraId));
+    setMarkers((prev) => prev.filter((m) => m.cameraId !== cameraId));
+
+    setFolderAssignments((prevMap) => {
+      const nextMap: Record<string, (string | null)[]> = {};
+      for (const [folderId, assignments] of Object.entries(prevMap)) {
+        nextMap[folderId] = assignments.map((id) => (id && sameDeviceId(id, cameraId) ? null : id));
+      }
+      return nextMap;
+    });
+
+    if (focusedCamId === cameraId) setFocusedCamId(null);
+    if (selectedMapCam === cameraId) {
+      const fallback = cameras.find((c) => c.id !== cameraId)?.id ?? "";
+      setSelectedMapCam(fallback);
+    }
+    if (singleViewCam === cameraId) setSingleViewCam(null);
+    setSelectedMarkerId((prev) => (prev === `m-${cameraId}` || prev === `m-${canonicalDeviceId(cameraId)}` ? null : prev));
+    setStreamRetryMap((prev) => {
+      const next = { ...prev };
+      delete next[cameraId];
+      return next;
+    });
+    setStreamUiStatus((prev) => {
+      const next = { ...prev };
+      delete next[canonicalDeviceId(cameraId)];
+      return next;
+    });
+
+    // Backend cleanup in background.
+    void fetch(`${NETWORK_CONFIG.ALGO_API_URL}/monitoring/stop/${cameraId}`, { method: "POST" }).catch(() => {});
+    void fetch(`${NETWORK_CONFIG.ALGO_API_URL}/cameras/unregister/${cameraId}`, { method: "POST" }).catch(() => {});
   };
 
   const rotateSelectedMarker = (delta: number) => {
@@ -578,13 +979,31 @@ function App() {
     if (!base) return;
     const name = window.prompt("새 폴더 이름을 입력하세요");
     if (!name) return;
-    setTree((prev) => addChildFolder(prev, targetId, name.trim()));
+    const label = name.trim();
+    if (!label) return;
+    const newNode: FolderNode = {
+      id: `folder-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      label,
+      children: [],
+    };
+    setTree((prev) => addChildFolderNode(prev, targetId, newNode));
+    setFolderAssignments((prevMap) => ({ ...prevMap, [newNode.id]: makeEmptyGridAssignments() }));
   };
 
   const removeFolderByNode = (targetId: string) => {
     if (targetId === "root" || targetId === "branch-01") return;
+    const targetNode = findNodeById(tree, targetId);
+    if (!targetNode) return;
+    const deletedIds = collectFolderIds(targetNode);
+
     setTree((prev) => removeFolderNode(prev, targetId));
-    if (selectedTreeId === targetId) setSelectedTreeId("branch-01");
+    setFolderAssignments((prevMap) => {
+      const nextMap = { ...prevMap };
+      for (const id of deletedIds) delete nextMap[id];
+      return nextMap;
+    });
+
+    if (deletedIds.includes(selectedTreeId)) setSelectedTreeId("branch-01");
   };
 
   const renderTree = (node: FolderNode) => {
@@ -623,21 +1042,24 @@ function App() {
     joyRef: React.RefObject<HTMLDivElement | null>,
     knob: { x: number; y: number },
     setKnob: (p: { x: number; y: number }) => void,
-    activeDirRef: React.MutableRefObject<Dir>
+    activeDirRef: React.MutableRefObject<Dir>,
+    disabled: boolean
   ) => {
     return (
-      <div className="joystick-card">
+      <div className={`joystick-card ${disabled ? "locked" : ""}`}>
         <div className="joystick-title">{title}</div>
         <div
           ref={joyRef}
-          className="joystick-pad"
+          className={`joystick-pad ${disabled ? "disabled" : ""}`}
           onPointerDown={(e) => {
+            if (disabled) return;
             const root = joyRef.current;
             if (!root) return;
             (e.currentTarget as HTMLDivElement).setPointerCapture(e.pointerId);
             moveJoystick(e, root, commandPrefix, speed, setKnob, activeDirRef);
           }}
           onPointerMove={(e) => {
+            if (disabled) return;
             const root = joyRef.current;
             if (!root || !(e.currentTarget as HTMLDivElement).hasPointerCapture(e.pointerId)) return;
             moveJoystick(e, root, commandPrefix, speed, setKnob, activeDirRef);
@@ -660,6 +1082,7 @@ function App() {
             min={1}
             max={8}
             value={speed}
+            disabled={disabled}
             onChange={(e) => setSpeed(Number(e.target.value))}
           />
           <span>{speed}</span>
@@ -685,45 +1108,24 @@ function App() {
           </section>
 
           <section className="controller-panel">
-            {renderJoystick("로봇 이동 조이스틱", "", moveSpeed, setMoveSpeed, moveJoyRef, moveKnob, setMoveKnob, activeMoveDirRef)}
-            {renderJoystick("카메라 조이스틱", "cam_", camSpeed, setCamSpeed, camJoyRef, camKnob, setCamKnob, activeCamDirRef)}
+            {renderJoystick("로봇 이동 조이스틱", "", moveSpeed, setMoveSpeed, moveJoyRef, moveKnob, setMoveKnob, activeMoveDirRef, controlsLocked)}
+            {renderJoystick("카메라 조이스틱", "cam_", camSpeed, setCamSpeed, camJoyRef, camKnob, setCamKnob, activeCamDirRef, controlsLocked)}
           </section>
         </aside>
 
         <main className="center-panel">
-          <section className="source-panel">
-            <div className="panel-head row">
-              <span>화면 소스</span>
-              <button type="button" className="add-cam-btn" onClick={openAddCameraModal}>+ CCTV 추가</button>
-            </div>
-            <div className="source-list">
-              {cameras.length === 0 && <div className="source-empty">등록된 CCTV가 없습니다. 추가 후 사용하세요.</div>}
-              {cameras.map((cam) => (
-                <button
-                  key={cam.id}
-                  type="button"
-                  className={`source-item ${focusedCamId === cam.id ? "focus" : ""}`}
-                  draggable
-                  onDragStart={() => {
-                    dragPayloadRef.current = { cameraId: cam.id, fromIndex: null };
-                  }}
-                  onClick={() => setFocusedCamId(cam.id)}
-                >
-                  <span className={`status-dot ${cam.status}`} />
-                  <span className="source-name">{cam.name}</span>
-                  <span className="source-id">{cam.sourceType}</span>
-                  <span className="source-source">{cam.sourceLabel}</span>
-                </button>
-              ))}
-            </div>
-          </section>
-
           <section className="grid-panel">
             <div className="panel-head row">
               <span>멀티뷰 ({gridSize}x{gridSize})</span>
               <span className="tip">드래그해서 화면 배치 · 연결 없는 화면은 검정</span>
             </div>
-            <div className="camera-grid" style={{ gridTemplateColumns: `repeat(${gridSize}, minmax(0, 1fr))` }}>
+            <div
+              className="camera-grid"
+              style={{
+                gridTemplateColumns: `repeat(${gridSize}, minmax(0, 1fr))`,
+                gridTemplateRows: `repeat(${gridSize}, minmax(0, 1fr))`,
+              }}
+            >
               {gridAssignments.map((camId, idx) => {
                 const cam = camId ? cameraMap.get(camId) ?? null : null;
                 return (
@@ -743,7 +1145,9 @@ function App() {
                       <>
                         <div className="cell-top">
                           <div className="left-meta">
-                            <span className={`status-dot ${cam.status}`} />
+                            <span
+                              className={`status-dot ${streamUiStatus[canonicalDeviceId(cam.id)] ?? "offline"}`}
+                            />
                             <input
                               value={cam.name}
                               onChange={(e) => {
@@ -761,6 +1165,9 @@ function App() {
                               setCameras((prev) => prev.map((p) => (
                                 p.id === cam.id ? { ...p, quality: value } : p
                               )));
+                              void applyStreamConfig(cam.id, value);
+                              // Re-open MJPEG stream so new quality/resolution reflects immediately.
+                              bumpStreamRetry(cam.id);
                             }}
                           >
                             {QUALITY_OPTIONS.map((q) => (
@@ -769,12 +1176,26 @@ function App() {
                           </select>
                         </div>
 
-                        <button type="button" className="stream-btn" onClick={() => setSingleViewCam(cam.id)}>
+                        <button
+                          type="button"
+                          className="stream-btn"
+                          onClick={() => setSingleViewCam((prev) => (prev === cam.id ? null : cam.id))}
+                        >
                           <img
-                            src={`${NETWORK_CONFIG.ALGO_API_URL}/video_feed/${cam.id}`}
+                            src={buildStreamUrl(cam.id)}
                             alt={cam.id}
-                            onError={(e) => {
-                              e.currentTarget.style.display = "none";
+                            onError={() => {
+                              // Retry stream endpoint when the current mjpeg socket is broken.
+                              // Throttled to avoid reconnect storm that can affect other feeds.
+                              setStreamUiStatus((prev) => ({
+                                ...prev,
+                                [canonicalDeviceId(cam.id)]: "offline",
+                              }));
+                              bumpStreamRetryThrottled(cam.id);
+                            }}
+                            onLoad={() => {
+                              const key = canonicalDeviceId(cam.id);
+                              setStreamUiStatus((prev) => ({ ...prev, [key]: "online" }));
                             }}
                           />
                         </button>
@@ -797,7 +1218,7 @@ function App() {
             </div>
             <div className="timeline-rows">
               {cameras.map((cam) => {
-                const events = timelineEvents.filter((e) => e.cameraId === cam.id);
+                const events = timelineEvents.filter((e) => sameDeviceId(e.cameraId, cam.id));
                 return (
                   <div key={`line-${cam.id}`} className="timeline-row-line">
                     <div className="cam-name">{cam.name}</div>
@@ -825,7 +1246,7 @@ function App() {
         <aside className="right-panel">
           <section className="map-panel">
             <div className="panel-head row">
-              <span>맵 (CCTV 배치)</span>
+              <span>맵 (장비 배치)</span>
               <div className="map-tools">
                 <select
                   value={selectedMapCam}
@@ -841,70 +1262,121 @@ function App() {
                 <button type="button" onClick={() => rotateSelectedMarker(10)}>↻</button>
               </div>
             </div>
+            <div className="map-main">
+              <div className={`placement-banner ${pendingMapPlacementCamId ? "" : "placeholder"}`}>
+                {pendingMapPlacementCamId ? (
+                  <>
+                    배치 대기: <strong>{cameraMap.get(pendingMapPlacementCamId)?.name ?? pendingMapPlacementCamId}</strong>
+                    {" "}장비 위치를 맵에서 클릭하세요.
+                  </>
+                ) : (
+                  <span>&nbsp;</span>
+                )}
+              </div>
 
-            <div
-              ref={mapRef}
-              className="map-canvas"
-              onClick={handleMapClick}
-            >
-              <div className="map-world">
-                <div className="map-layout">
-                  <div className="wall wall-left-top" />
-                  <div className="wall wall-top-right" />
-                  <div className="wall wall-center-vertical" />
-                  <div className="wall wall-right-mid-small-1" />
-                  <div className="wall wall-right-mid-small-2" />
-                  <div className="wall wall-right-bottom-vertical" />
-                  <div className="wall wall-center-bottom-box" />
-                  <div className="wall wall-bottom-left-h" />
-                  <div className="wall wall-bottom-center-h" />
-                  <div className="wall wall-bottom-right-h" />
-                  <div className="door-arc" />
-                </div>
-                {markers.map((marker) => {
-                  const isSelected = marker.id === selectedMarkerId;
-                  return (
-                    <div
-                      key={marker.id}
-                      data-marker="1"
-                      className={`marker-wrap ${isSelected ? "selected" : ""}`}
-                      style={{ left: `${marker.x}%`, top: `${marker.y}%` }}
-                    >
-                      <div data-marker="1" className="marker-rotate-group" style={{ transform: `rotate(${marker.angle}deg)` }}>
-                        <div data-marker="1" className="fov-cone" />
-                        <button
-                          data-marker="1"
-                          type="button"
-                          className="camera-marker"
-                          onMouseDown={() => {
-                            draggingMarkerRef.current = marker.id;
-                          }}
-                          onClick={() => {
-                            setSelectedMarkerId(marker.id);
-                            setFocusedCamId(marker.cameraId);
-                          }}
-                          onDoubleClick={() => setSingleViewCam(marker.cameraId)}
-                        >
-                          📹
-                        </button>
+              <div
+                ref={mapRef}
+                className="map-canvas"
+                onClick={handleMapClick}
+              >
+                <div className="map-world">
+                  <div className="map-layout">
+                    <div className="wall wall-left-top" />
+                    <div className="wall wall-top-right" />
+                    <div className="wall wall-center-vertical" />
+                    <div className="wall wall-right-mid-small-1" />
+                    <div className="wall wall-right-mid-small-2" />
+                    <div className="wall wall-right-bottom-vertical" />
+                    <div className="wall wall-center-bottom-box" />
+                    <div className="wall wall-bottom-left-h" />
+                    <div className="wall wall-bottom-center-h" />
+                    <div className="wall wall-bottom-right-h" />
+                    <div className="door-arc" />
+                  </div>
+                  {markers.map((marker) => {
+                    const isSelected = marker.id === selectedMarkerId;
+                    const markerCam = cameraMap.get(marker.cameraId) ?? null;
+                    const isRobot = isRobotDevice(markerCam);
+                    return (
+                      <div
+                        key={marker.id}
+                        data-marker="1"
+                        className={`marker-wrap ${isSelected ? "selected" : ""}`}
+                        style={{ left: `${marker.x}%`, top: `${marker.y}%` }}
+                      >
+                        <div data-marker="1" className="marker-rotate-group" style={{ transform: `rotate(${marker.angle}deg)` }}>
+                          <div data-marker="1" className="fov-cone" />
+                          <button
+                            data-marker="1"
+                            type="button"
+                            className={`camera-marker ${isRobot ? "robot-marker" : ""}`}
+                            onMouseDown={() => {
+                              draggingMarkerRef.current = marker.id;
+                            }}
+                            onClick={() => {
+                              setSelectedMarkerId(marker.id);
+                              setFocusedCamId(marker.cameraId);
+                            }}
+                            onDoubleClick={() => setSingleViewCam(marker.cameraId)}
+                          >
+                            {isRobot ? "🤖" : "📹"}
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
             </div>
           </section>
 
-          <section className="map-info-panel">
-            <div className="panel-head">선택 CCTV</div>
-            <div className="map-info-content">
-              {!focusedCamId && <div className="muted">선택된 CCTV가 없습니다.</div>}
-              {focusedCamId && (
+          <section className="source-panel source-panel-right">
+            <div className="panel-head row">
+              <span>화면 소스</span>
+              <button type="button" className="add-cam-btn" onClick={openAddCameraModal}>+ 장치 추가</button>
+            </div>
+            <div className="source-list">
+              {cameras.length === 0 && <div className="source-empty">등록된 CCTV가 없습니다. 추가 후 사용하세요.</div>}
+              {cameras.map((cam) => (
+                <div
+                  key={cam.id}
+                  className={`source-item ${focusedCamId === cam.id ? "focus" : ""}`}
+                >
+                  <button
+                    type="button"
+                    className="source-main-btn"
+                    draggable
+                    onDragStart={() => {
+                      dragPayloadRef.current = { cameraId: cam.id, fromIndex: null };
+                    }}
+                    onClick={() => setFocusedCamId(cam.id)}
+                  >
+                  <span
+                    className={`status-dot ${streamUiStatus[canonicalDeviceId(cam.id)] ?? "offline"}`}
+                  />
+                  <span className="source-name">{cam.name}</span>
+                  <span className="source-id">{cam.sourceType}</span>
+                  <span className="source-source">{cam.sourceLabel}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="disconnect-btn"
+                    onClick={() => disconnectCamera(cam.id)}
+                    title="연결 해제"
+                  >
+                    해제
+                  </button>
+                </div>
+              ))}
+            </div>
+            <div className="source-selected-summary">
+              {!focusedCam && <span className="muted">현재 선택된 장비 없음</span>}
+              {focusedCam && (
                 <>
-                  <div><strong>ID:</strong> {focusedCamId}</div>
-                  <div><strong>이름:</strong> {cameraMap.get(focusedCamId)?.name}</div>
-                  <div><strong>상태:</strong> {cameraMap.get(focusedCamId)?.status === "online" ? "정상" : "끊김"}</div>
-                  <button type="button" onClick={() => setSingleViewCam(focusedCamId)}>단일 화면 열기</button>
+                  <div><strong>선택:</strong> {focusedCam.name}</div>
+                  <div><strong>소스:</strong> {focusedCam.sourceType} / {focusedCam.sourceLabel}</div>
+                  <div><strong>화질:</strong> {focusedCam.quality}</div>
+                  <div><strong>배치:</strong> {focusedCamSlots.length > 0 ? focusedCamSlots.map((v) => `${v}번`).join(", ") : "미배치"}</div>
                 </>
               )}
             </div>
@@ -916,48 +1388,87 @@ function App() {
         <div className="add-modal-overlay" onClick={closeAddCameraModal}>
           <div className="add-modal" onClick={(e) => e.stopPropagation()}>
             <div className="add-modal-head">
-              <h3>CCTV 연결 추가</h3>
+              <h3>장비 연결 추가</h3>
               <button type="button" onClick={closeAddCameraModal}>닫기</button>
             </div>
 
             <div className="add-modal-body">
-              <label className="add-modal-field">
-                <span>카메라 ID *</span>
-                <input
-                  value={newCamera.camId}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    setAddError("");
-                    setNewCamera((prev) => ({ ...prev, camId: value }));
-                  }}
-                  placeholder="예: CCTV_RealSense_999"
-                />
-              </label>
+                <div className="template-row">
+                  <button
+                    type="button"
+                    className={`template-btn ${addTarget === "robot" ? "active" : ""}`}
+                    onClick={() => {
+                      setAddError("");
+                      setAddTarget("robot");
+                      setNewCamera((prev) => ({
+                        ...prev,
+                        sourceType: "USB",
+                        camId: "",
+                        displayName: "ROBOT_1",
+                        usbDeviceName: "ROBOT_1",
+                      }));
+                    }}
+                  >
+                  로봇
+                </button>
+                <button
+                  type="button"
+                  className={`template-btn ${addTarget === "cctv" ? "active" : ""}`}
+                    onClick={() => {
+                      setAddError("");
+                      setAddTarget("cctv");
+                      setNewCamera((prev) => ({
+                        ...prev,
+                        sourceType: "USB",
+                        camId: "",
+                        displayName: "CCTV_RealSense_999",
+                        usbDeviceName: "CCTV_RealSense_999",
+                      }));
+                    }}
+                  >
+                  CCTV
+                </button>
+              </div>
 
-              <div className="add-source-type">
-                <label>
-                  <input
-                    type="radio"
-                    checked={newCamera.sourceType === "USB"}
-                    onChange={() => {
+              {addTarget === "cctv" && (
+                <div className="source-toggle">
+                  <button
+                    type="button"
+                    className={`source-toggle-btn ${newCamera.sourceType === "USB" ? "active" : ""}`}
+                    onClick={() => {
                       setAddError("");
                       setNewCamera((prev) => ({ ...prev, sourceType: "USB" }));
                     }}
-                  />
-                  USB 카메라
-                </label>
-                <label>
-                  <input
-                    type="radio"
-                    checked={newCamera.sourceType === "RTSP"}
-                    onChange={() => {
+                  >
+                    USB형
+                  </button>
+                  <button
+                    type="button"
+                    className={`source-toggle-btn ${newCamera.sourceType === "RTSP" ? "active" : ""}`}
+                    onClick={() => {
                       setAddError("");
                       setNewCamera((prev) => ({ ...prev, sourceType: "RTSP" }));
                     }}
+                  >
+                    RTSP형
+                  </button>
+                </div>
+              )}
+
+              {addTarget === "cctv" && newCamera.sourceType === "RTSP" && (
+                <label className="add-modal-field">
+                  <span>RTSP 카메라 ID *</span>
+                  <input
+                    value={newCamera.camId}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setAddError("");
+                      setNewCamera((prev) => ({ ...prev, camId: value }));
+                    }}
+                    placeholder="예: CCTV_RTSP_01"
                   />
-                  RTSP 스트림
                 </label>
-              </div>
+              )}
 
               <label className="add-modal-field">
                 <span>표시 이름 (선택)</span>
@@ -971,9 +1482,9 @@ function App() {
                 />
               </label>
 
-              {newCamera.sourceType === "USB" && (
+              {(addTarget === "robot" || newCamera.sourceType === "USB") && (
                 <label className="add-modal-field">
-                  <span>USB 장치명 (선택)</span>
+                  <span>USB 장치명 *</span>
                   <input
                     value={newCamera.usbDeviceName}
                     onChange={(e) => {
@@ -981,12 +1492,12 @@ function App() {
                       setAddError("");
                       setNewCamera((prev) => ({ ...prev, usbDeviceName: value }));
                     }}
-                    placeholder="예: USB_CAM_01"
+                    placeholder={addTarget === "robot" ? "예: ROBOT_1" : "예: CCTV_RealSense_999"}
                   />
                 </label>
               )}
 
-              {newCamera.sourceType === "RTSP" && (
+              {addTarget === "cctv" && newCamera.sourceType === "RTSP" && (
                 <div className="add-modal-grid-2">
                   <label className="add-modal-field">
                     <span>RTSP IP 주소 *</span>
@@ -1038,19 +1549,33 @@ function App() {
         </div>
       )}
 
+      {showMapPlacementModal && pendingMapPlacementCamId && (
+        <div className="placement-modal-overlay" onClick={() => setShowMapPlacementModal(false)}>
+          <div className="placement-modal" onClick={(e) => e.stopPropagation()}>
+            <h3>맵 배치 안내</h3>
+            <p>
+              <strong>{cameraMap.get(pendingMapPlacementCamId)?.name ?? pendingMapPlacementCamId}</strong>
+              {" "}장비를 추가했습니다.
+            </p>
+            <p>아래 우측 맵 영역에서 원하는 위치를 클릭하면 장비가 배치됩니다.</p>
+            <div className="placement-modal-actions">
+              <button type="button" onClick={() => setShowMapPlacementModal(false)}>닫기</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {singleViewCam && (
         <div className="single-view-overlay">
           <div className="single-head">
             <div>{cameraMap.get(singleViewCam)?.name ?? singleViewCam}</div>
             <button type="button" onClick={() => setSingleViewCam(null)}>닫기</button>
           </div>
-          <div className="single-body">
+          <div className="single-body" onClick={() => setSingleViewCam(null)}>
             <img
-              src={`${NETWORK_CONFIG.ALGO_API_URL}/video_feed/${singleViewCam}`}
+              src={buildStreamUrl(singleViewCam)}
               alt={singleViewCam}
-              onError={(e) => {
-                e.currentTarget.style.display = "none";
-              }}
+              onError={() => bumpStreamRetryThrottled(singleViewCam)}
             />
             <div className="single-fallback">NO SIGNAL</div>
           </div>

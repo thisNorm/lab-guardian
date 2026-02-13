@@ -1,9 +1,10 @@
-import time, socket, cv2, numpy as np
+﻿import time, socket, cv2, numpy as np
 import logging
 import torch
 import psutil
 import uvicorn, os, asyncio, sys
 import subprocess
+import threading
 from functools import wraps
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, UploadFile, File, HTTPException, Request
@@ -12,13 +13,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles 
 from dotenv import load_dotenv # 환경변수 로드
 
-# ✅ functions 폴더에서 모듈 불러오기
+# functions 폴더에서 모듈 불러오기
 from functions.ai_detector import AIDetector
 from functions.notifier import TelegramNotifier
 from functions.recorder import VideoRecorder
 
 # ================= 설정 (환경변수 적용) =================
-load_dotenv() # .env 파일 로딩
+load_dotenv() # .env 파일 로드
 
 logging.getLogger("uvicorn").setLevel(logging.CRITICAL)
 logging.getLogger("uvicorn.error").setLevel(logging.CRITICAL)
@@ -70,7 +71,7 @@ OPENCV_FFMPEG_CAPTURE_OPTIONS = os.getenv(
 os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = OPENCV_FFMPEG_CAPTURE_OPTIONS
 
 if not TELEGRAM_TOKEN or not PC_IP:
-    print("❌ [오류] .env 파일 설정이 누락되었습니다.")
+    print("❌[오류] .env 파일 설정이 누락되었습니다.")
     sys.exit(1)
 # ======================================================
 
@@ -84,6 +85,7 @@ async def lifespan(app: FastAPI):
         loop.default_exception_handler(context)
     loop.set_exception_handler(_handler)
     asyncio.create_task(_auto_quality_loop())
+    asyncio.create_task(_ui_session_watchdog_loop())
     yield
 
 app = FastAPI(lifespan=lifespan)
@@ -93,12 +95,12 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, 
 os.makedirs("recordings", exist_ok=True)
 app.mount("/recordings", StaticFiles(directory="recordings"), name="recordings")
 
-# ✅ 모듈 초기화
+# 모듈 초기화
 detector = AIDetector()
 notifier = TelegramNotifier(TELEGRAM_TOKEN, TELEGRAM_CHAT_ID)
 recorder = VideoRecorder(save_dir="recordings")
 
-# 상태 변수들
+# ?곹깭 蹂?섎뱾
 camera_streams = {}
 camera_sources = {}
 last_seen = {}
@@ -117,6 +119,7 @@ last_stream_sent = {}
 last_detect_time = {}
 last_annotated_frames = {}
 last_danger_time = {}
+last_live_frame_at = {}
 stream_tasks = {}
 stream_stop_events = {}
 stream_jpeg_cache = {}
@@ -125,6 +128,39 @@ stream_configs = {}
 auto_quality_index = 1
 auto_quality_high_count = 0
 auto_quality_low_count = 0
+ui_sessions = {}
+UI_SESSION_TIMEOUT_SEC = float(os.getenv("UI_SESSION_TIMEOUT_SEC", "10"))
+DISCONNECT_DEDUPE_SEC = float(os.getenv("DISCONNECT_DEDUPE_SEC", "2.0"))
+status_send_cache = {}
+status_send_lock = threading.Lock()
+
+
+def canonical_cam_id(raw: str) -> str:
+    cam_id = (raw or "").strip()
+    upper = cam_id.upper()
+    if upper in ("ROBOT", "ROBOT1", "ROBOT_1"):
+        return "ROBOT_1"
+    if upper in ("REALSENSE", "CCTV_REALSENSE", "CCTV_REALSENSE999", "CCTV_REALSENSE_999"):
+        return "CCTV_RealSense_999"
+    return cam_id
+
+
+def get_stream_frame_for_cam(cam_id: str):
+    exact = camera_streams.get(cam_id)
+    if exact is not None:
+        return exact
+
+    canonical = canonical_cam_id(cam_id)
+    if canonical != cam_id:
+        by_canonical = camera_streams.get(canonical)
+        if by_canonical is not None:
+            return by_canonical
+
+    target_upper = canonical.upper()
+    for key, value in camera_streams.items():
+        if canonical_cam_id(key).upper() == target_upper:
+            return value
+    return None
 
 def _encode_jpeg(frame, quality):
     params = [int(cv2.IMWRITE_JPEG_QUALITY), int(quality)]
@@ -222,6 +258,9 @@ async def _auto_quality_loop():
 
         preset = QUALITY_PRESETS[auto_quality_index]
         for cam_id in list(stream_configs.keys()):
+            # Respect manually selected quality. Auto loop should only tune auto-managed streams.
+            if stream_configs.get(cam_id, {}).get("auto", False) is False:
+                continue
             stream_configs[cam_id] = {
                 "width": preset["width"],
                 "height": preset["height"],
@@ -230,6 +269,53 @@ async def _auto_quality_loop():
                 "label": preset["label"],
                 "auto": True,
             }
+
+def _force_disconnect_internal(cam_id: str, status: str = "FORCED_DISCONNECTED"):
+    cam_id = canonical_cam_id(cam_id)
+    camera_sources.pop(cam_id, None)
+    stream_configs.pop(cam_id, None)
+    stream_jpeg_cache.pop(cam_id, None)
+    camera_streams.pop(cam_id, None)
+    last_stream_sent.pop(cam_id, None)
+    last_live_frame_at.pop(cam_id, None)
+    last_detect_time.pop(cam_id, None)
+    last_annotated_frames.pop(cam_id, None)
+    monitoring_enabled.discard(cam_id)
+    active_viewers.discard(cam_id)
+    verified_viewers.discard(cam_id)
+    device_status[cam_id] = "SAFE"
+    last_alert_times.pop(cam_id, None)
+    last_danger_time.pop(cam_id, None)
+    last_heartbeat.pop(cam_id, None)
+    try:
+        detector.remove_tracker(cam_id)
+    except Exception:
+        pass
+    if cam_id in stream_stop_events:
+        stream_stop_events[cam_id].set()
+    viewer_counts.pop(cam_id, None)
+    send_to_gateway(cam_id, status)
+    print(f"[force_disconnect] {cam_id} -> {status}")
+
+async def _ui_session_watchdog_loop():
+    while True:
+        try:
+            now = time.time()
+            expired = []
+            for sid, info in list(ui_sessions.items()):
+                last_seen = float(info.get("last_seen", 0.0))
+                if now - last_seen > UI_SESSION_TIMEOUT_SEC:
+                    expired.append((sid, info))
+
+            for sid, info in expired:
+                for raw_id in (info.get("camera_ids", []) or []):
+                    cam_id = canonical_cam_id(str(raw_id))
+                    if cam_id:
+                        _force_disconnect_internal(cam_id, "FORCED_DISCONNECTED")
+                ui_sessions.pop(sid, None)
+        except Exception as e:
+            print(f"[ui_watchdog] loop error: {e}")
+        await asyncio.sleep(2)
 
 async def _stream_worker(cam_id):
     source = camera_sources.get(cam_id)
@@ -290,7 +376,7 @@ async def _stream_worker(cam_id):
                     continue
 
                 display_frame = frame
-                # 조건부 지연 해소: 지연이 클 때만 짧게 프레임 드롭
+                # 조건부 지연 해소: 지연이 클 때만 최신 프레임으로 갱신
                 if now - last_stream_sent.get(cam_id, 0) > DROP_LAG_SEC:
                     for _ in range(max(1, DROP_LAG_FRAMES)):
                         if not cap.grab():
@@ -317,10 +403,11 @@ async def _stream_worker(cam_id):
                 if buf is not None:
                     stream_jpeg_cache[cam_id] = (buf.tobytes(), now)
                     last_stream_sent[cam_id] = now
+                    last_live_frame_at[cam_id] = now
                 continue
 
             # robot/usb: use latest frame if available
-            frame = camera_streams.get(cam_id)
+            frame = get_stream_frame_for_cam(cam_id)
             if frame is None:
                 buf = _encode_jpeg(offline_frame, quality)
                 if buf is not None:
@@ -337,13 +424,23 @@ async def _stream_worker(cam_id):
             if buf is not None:
                 stream_jpeg_cache[cam_id] = (buf.tobytes(), now)
                 last_stream_sent[cam_id] = now
+                last_live_frame_at[cam_id] = now
     finally:
         if cap is not None:
             cap.release()
 
 async def ensure_stream_task(cam_id):
-    if cam_id in stream_tasks and not stream_tasks[cam_id].done():
-        return
+    existing_task = stream_tasks.get(cam_id)
+    existing_stop = stream_stop_events.get(cam_id)
+    if existing_task is not None and not existing_task.done():
+        # If previous worker is still alive and not marked for stop, keep it.
+        # When stop flag is already set, force worker restart so re-connect can recover.
+        if existing_stop is not None and not existing_stop.is_set():
+            return
+        try:
+            existing_task.cancel()
+        except Exception:
+            pass
     if cam_id not in stream_configs:
         default_preset = QUALITY_PRESETS[1]
         stream_configs[cam_id] = {
@@ -375,6 +472,21 @@ def mask_rtsp_url(ip, stream="sub", port=554, path=None):
 
 def send_to_gateway(cam_id, status_msg, image_path=None):
     try:
+        now = time.time()
+        # Suppress rapid duplicate disconnect floods during shutdown/retry races.
+        if status_msg in ("DISCONNECTED", "FORCED_DISCONNECTED"):
+            key = (cam_id, status_msg)
+            with status_send_lock:
+                last_ts = float(status_send_cache.get(key, 0.0))
+                if (now - last_ts) < DISCONNECT_DEDUPE_SEC:
+                    return
+                status_send_cache[key] = now
+        elif status_msg == "CONNECTED":
+            # Reset dedupe window after a successful reconnect.
+            with status_send_lock:
+                status_send_cache.pop((cam_id, "DISCONNECTED"), None)
+                status_send_cache.pop((cam_id, "FORCED_DISCONNECTED"), None)
+
         full_msg = f"{cam_id}:{status_msg}"
         if image_path:
             full_msg += f":{image_path}"
@@ -382,13 +494,13 @@ def send_to_gateway(cam_id, status_msg, image_path=None):
             s.settimeout(2.0)
             s.connect((PC_IP, PORT_GATEWAY))
             s.sendall(full_msg.encode('utf-8'))
-            print(f"📡 [전송] {full_msg}") 
+            print(f"📡 [전송] {full_msg}")
     except Exception as e:
         now = time.time()
         key = f"gateway:{cam_id}"
         if now - error_last_log.get(key, 0) > ERROR_LOG_COOLDOWN:
             error_last_log[key] = now
-            print(f"❌ [전송 실패] {e}")
+            print(f"❌[전송 실패] {e}")
 
 def process_detection(cam_id, frame, current_time, require_verified_viewer):
     annotated_frame, new_ids, _ = detector.detect_and_track(cam_id, frame)
@@ -414,7 +526,8 @@ def process_detection(cam_id, frame, current_time, require_verified_viewer):
             img_path = recorder.save_snapshot(cam_id, frame)
             notifier.send_photo(cam_id, frame)
             recorder.start_recording(cam_id, duration=10.0, current_time=current_time)
-            send_to_gateway(cam_id, "침입자 감지(스냅샷)", image_path=img_path)
+            # Use normalized status token so gateway/web timeline can classify the event reliably.
+            send_to_gateway(cam_id, "DANGER", image_path=img_path)
             last_alert_times[cam_id] = current_time
         elif status_changed:
             send_to_gateway(cam_id, "DANGER")
@@ -438,7 +551,7 @@ def process_detection(cam_id, frame, current_time, require_verified_viewer):
 
 @app.get("/system/runtime")
 def system_runtime():
-    # 관측용: 추론 디바이스 및 CPU 사용률 노출
+    # 관측용: 추론 디바이스와 CPU 사용률을 노출
     is_cuda = torch.cuda.is_available()
     device = "cuda" if is_cuda else "cpu"
     gpu_name = torch.cuda.get_device_name(0) if is_cuda else None
@@ -452,43 +565,51 @@ def system_runtime():
 @app.post("/upload_frame/{robot_id}")
 async def upload_frame(robot_id: str, file: UploadFile = File(...)):
     try:
+        normalized_id = canonical_cam_id(robot_id)
         contents = await file.read()
         nparr = np.frombuffer(contents, np.uint8)
         frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
         if frame is None: return {"status": "fail"}
 
         current_time = time.time()
-        last_seen[robot_id] = current_time
+        last_seen[normalized_id] = current_time
+        last_live_frame_at[normalized_id] = current_time
+        if normalized_id != robot_id:
+            last_seen[robot_id] = current_time
 
-        # 스트리밍용 프레임은 항상 최신으로 유지
-        camera_streams[robot_id] = frame
-        # 감시 활성 상태가 아니라면 탐지/알림은 생략 (스트림 연결과 분리)
-        if robot_id not in monitoring_enabled:
+        # 스트림용 프레임은 항상 최신으로 유지
+        camera_streams[normalized_id] = frame
+        if normalized_id != robot_id:
+            camera_streams[robot_id] = frame
+        # 감시 활성 상태가 아니면 탐지/알림은 생략 (스트림 연결과 분리)
+        if normalized_id not in monitoring_enabled:
             return {"status": "ignored"}
 
         annotated_frame, new_ids = process_detection(
-            robot_id,
+            normalized_id,
             frame,
             current_time,
             require_verified_viewer=True,
         )
 
-        recorder.process_frame(robot_id, frame, current_time)
+        recorder.process_frame(normalized_id, frame, current_time)
 
-        if current_time - last_heartbeat.get(robot_id, 0) >= 600:
-            if robot_id in verified_viewers and device_status.get(robot_id) != "DANGER":
-                send_to_gateway(robot_id, "SAFE")
-                last_heartbeat[robot_id] = current_time
+        if current_time - last_heartbeat.get(normalized_id, 0) >= 600:
+            if normalized_id in verified_viewers and device_status.get(normalized_id) != "DANGER":
+                send_to_gateway(normalized_id, "SAFE")
+                last_heartbeat[normalized_id] = current_time
 
-        camera_streams[robot_id] = annotated_frame
+        camera_streams[normalized_id] = annotated_frame
+        if normalized_id != robot_id:
+            camera_streams[robot_id] = annotated_frame
         return {"status": "ok"}
     except Exception as e:
-        print(f"❌ [upload_frame 오류] {robot_id}: {e}")
+        print(f"❌[upload_frame 오류] {robot_id}: {e}")
         return {"status": "error"}
 
 @app.post("/cameras/register")
 async def register_camera(payload: dict):
-    cam_id = str(payload.get("cam_id", "")).strip()
+    cam_id = canonical_cam_id(str(payload.get("cam_id", "")).strip())
     ip = str(payload.get("ip", "")).strip()
     username = str(payload.get("username", "")).strip()
     password = str(payload.get("password", "")).strip()
@@ -537,21 +658,33 @@ async def register_camera(payload: dict):
 
 @app.post("/cameras/unregister/{cam_id}")
 async def unregister_camera(cam_id: str):
+    cam_id = canonical_cam_id(cam_id)
     camera_sources.pop(cam_id, None)
     stream_configs.pop(cam_id, None)
     stream_jpeg_cache.pop(cam_id, None)
     last_stream_sent.pop(cam_id, None)
+    last_live_frame_at.pop(cam_id, None)
     last_detect_time.pop(cam_id, None)
     last_annotated_frames.pop(cam_id, None)
     monitoring_enabled.discard(cam_id)
     active_viewers.discard(cam_id)
     verified_viewers.discard(cam_id)
+    last_alert_times.pop(cam_id, None)
+    last_danger_time.pop(cam_id, None)
+    last_heartbeat.pop(cam_id, None)
+    device_status.pop(cam_id, None)
+    try:
+        detector.remove_tracker(cam_id)
+    except Exception:
+        pass
     if cam_id in stream_stop_events:
         stream_stop_events[cam_id].set()
+    viewer_counts.pop(cam_id, None)
     return {"status": "ok", "cam_id": cam_id}
 
 @app.get("/video_feed/{cam_id}")
 async def video_feed(cam_id: str, request: Request):
+    cam_id = canonical_cam_id(cam_id)
     async def generate():
         active_viewers.add(cam_id)
         viewer_counts[cam_id] = viewer_counts.get(cam_id, 0) + 1
@@ -586,19 +719,39 @@ async def video_feed(cam_id: str, request: Request):
                     break
         finally:
             active_viewers.discard(cam_id)
-            viewer_counts[cam_id] = max(0, viewer_counts.get(cam_id, 1) - 1)
-            if viewer_counts.get(cam_id, 0) == 0:
+            prev_count = viewer_counts.get(cam_id, 0)
+            next_count = max(0, prev_count - 1)
+            viewer_counts[cam_id] = next_count
+            # Send disconnect only on 1 -> 0 transition to avoid duplicate flood on shutdown/retry.
+            if prev_count > 0 and next_count == 0:
                 send_to_gateway(cam_id, "DISCONNECTED")
                 verified_viewers.discard(cam_id)
                 if cam_id in stream_stop_events:
                     stream_stop_events[cam_id].set()
+            if next_count == 0:
+                viewer_counts.pop(cam_id, None)
             last_stream_sent.pop(cam_id, None)
             last_detect_time.pop(cam_id, None)
             last_annotated_frames.pop(cam_id, None)
     return StreamingResponse(generate(), media_type="multipart/x-mixed-replace; boundary=frame")
 
+@app.get("/streams/health/{cam_id}")
+async def stream_health(cam_id: str):
+    cam_id = canonical_cam_id(cam_id)
+    now = time.time()
+    last_live = last_live_frame_at.get(cam_id, 0.0)
+    online = (now - last_live) <= max(STALE_FRAME_SEC, 2.0)
+    return {
+        "status": "ok",
+        "cam_id": cam_id,
+        "online": online,
+        "last_live_at": last_live,
+        "age_sec": (now - last_live) if last_live > 0 else None,
+    }
+
 @app.post("/streams/config/{cam_id}")
 async def update_stream_config(cam_id: str, payload: dict):
+    cam_id = canonical_cam_id(cam_id)
     width = payload.get("width", DEFAULT_STREAM_CONFIG["width"])
     height = payload.get("height", DEFAULT_STREAM_CONFIG["height"])
     fps = payload.get("fps", DEFAULT_STREAM_CONFIG["fps"])
@@ -624,6 +777,7 @@ async def update_stream_config(cam_id: str, payload: dict):
 
 @app.get("/streams/config/{cam_id}")
 async def get_stream_config(cam_id: str):
+    cam_id = canonical_cam_id(cam_id)
     cfg = stream_configs.get(cam_id, DEFAULT_STREAM_CONFIG)
     return {"status": "ok", "cam_id": cam_id, "config": cfg}
 
@@ -643,19 +797,50 @@ def stop_monitoring(cam_id: str):
 
 @app.post("/monitoring/start/{cam_id}")
 def start_monitoring(cam_id: str):
+    cam_id = canonical_cam_id(cam_id)
+    was_enabled = cam_id in monitoring_enabled
     monitoring_enabled.add(cam_id)
     device_status[cam_id] = device_status.get(cam_id, "SAFE")
+    if not was_enabled:
+        send_to_gateway(cam_id, "CONNECTED")
     return {"status": "monitoring_enabled"}
 
 @app.post("/monitoring/stop/{cam_id}")
 def stop_monitoring_explicit(cam_id: str):
-    # 감시 비활성화: 탐지/알림 중단(스트리밍과 무관)
+    cam_id = canonical_cam_id(cam_id)
+    # 감시 비활성화: 탐지/알림 중단(스트림과 무관)
     monitoring_enabled.discard(cam_id)
     active_viewers.discard(cam_id)
     verified_viewers.discard(cam_id)
     device_status[cam_id] = "SAFE"
+    last_alert_times.pop(cam_id, None)
+    last_danger_time.pop(cam_id, None)
+    last_heartbeat.pop(cam_id, None)
+    try:
+        detector.remove_tracker(cam_id)
+    except Exception:
+        pass
     send_to_gateway(cam_id, "DISCONNECTED")
     return {"status": "disconnected"}
+
+@app.post("/monitoring/force_disconnect/{cam_id}")
+def force_disconnect_explicit(cam_id: str):
+    cam_id = canonical_cam_id(cam_id)
+    _force_disconnect_internal(cam_id, "FORCED_DISCONNECTED")
+    return {"status": "forced_disconnected", "cam_id": cam_id}
+
+@app.post("/ui/session/heartbeat")
+async def ui_session_heartbeat(payload: dict):
+    session_id = str(payload.get("session_id", "")).strip()
+    raw_ids = payload.get("camera_ids", []) or []
+    if not session_id:
+        raise HTTPException(status_code=400, detail="session_id is required")
+    camera_ids = [canonical_cam_id(str(x)) for x in raw_ids if str(x).strip()]
+    ui_sessions[session_id] = {
+        "last_seen": time.time(),
+        "camera_ids": camera_ids,
+    }
+    return {"status": "ok", "session_id": session_id, "camera_count": len(camera_ids)}
 
 if __name__ == "__main__":
     if sys.platform == 'win32':
@@ -663,3 +848,5 @@ if __name__ == "__main__":
         _ProactorBasePipeTransport._call_connection_lost = lambda *args, **kwargs: None
     config = uvicorn.Config(app, host="0.0.0.0", port=PORT_ALGO, log_level="critical", access_log=False)
     uvicorn.Server(config).run()
+
+

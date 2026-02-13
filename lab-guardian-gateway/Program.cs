@@ -245,6 +245,7 @@ while (!cts.IsCancellationRequested)
                     "SAFE" => "✅ 이상 없음 (정기 보고)",
                     "CONNECTED" => "🌐 장치 연결 성공",
                     "DISCONNECTED" => "❌ 장치 연결 끊김",
+                    "FORCED_DISCONNECTED" => "⛔ 강제 연결 종료(웹 종료)",
                     "CONTROL" => "🎮 조종 모드 (전체화면)",
                     "MONITOR" => "🛡️ 감시 모드 (전체화면 해제)",
                     _ => status

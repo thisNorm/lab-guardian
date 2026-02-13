@@ -40,12 +40,13 @@ class RealSenseCamera:
     def get_frame(self):
         if self.active:
             try:
-                frames = self.pipeline.wait_for_frames(timeout_ms=1000)
+                frames = self.pipeline.wait_for_frames(timeout_ms=300)
                 color_frame = frames.get_color_frame()
                 if color_frame:
                     frame = np.asanyarray(color_frame.get_data())
                     return self.id, cv2.resize(frame, (WIDTH, HEIGHT))
-            except: pass
+            except Exception:
+                pass
         return self.id, None
 
     def stop(self):
@@ -53,7 +54,8 @@ class RealSenseCamera:
             try:
                 self.pipeline.stop()
                 print(f"✅ {self.id} 중지됨")
-            except: pass
+            except Exception:
+                pass
 
 class GenericCamera:
     def __init__(self, index):
@@ -136,7 +138,8 @@ def main():
                             files=files,
                             timeout=(1.0, 5.0),  # 연결/응답 타임아웃 여유를 줘서 프레임 누락 방지
                         )
-                    except: pass
+                    except Exception:
+                        pass
             time.sleep(0.01)
     except KeyboardInterrupt:
         print("\n👋 종료 요청됨...")
@@ -144,7 +147,8 @@ def main():
         for cam in cameras: 
             cam.stop()
         print("✅ 모든 프로세스가 종료되었습니다.")
-        sys.exit(0)
+        # Let the process terminate naturally after resource cleanup.
+        return
 
 if __name__ == "__main__":
     main()
