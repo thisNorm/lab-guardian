@@ -727,10 +727,17 @@ function App() {
     const markerId = `m-${camId}`;
     const hasExisting = markers.some((m) => m.id === markerId);
 
+    // Existing marker should be moved only by dragging, not by map-click creation flow.
+    if (hasExisting) {
+      setPendingMapPlacementCamId(null);
+      setShowMapPlacementModal(false);
+      setSelectedMarkerId(markerId);
+      setFocusedCamId(camId);
+      setSelectedMapCam(camId);
+      return;
+    }
+
     setMarkers((prev) => {
-      if (hasExisting) {
-        return prev.map((m) => (m.id === markerId ? { ...m, x: p.x, y: p.y } : m));
-      }
       return [
         ...prev,
         {
@@ -1349,7 +1356,21 @@ function App() {
                     onDragStart={() => {
                       dragPayloadRef.current = { cameraId: cam.id, fromIndex: null };
                     }}
-                    onClick={() => setFocusedCamId(cam.id)}
+                    onClick={() => {
+                      setFocusedCamId(cam.id);
+                      setSelectedMapCam(cam.id);
+
+                      const existingMarker = markers.find((m) => sameDeviceId(m.cameraId, cam.id));
+                      if (existingMarker) {
+                        setSelectedMarkerId(existingMarker.id);
+                        setPendingMapPlacementCamId(null);
+                        return;
+                      }
+
+                      // Only unmapped devices enter map placement mode from source click.
+                      setSelectedMarkerId(null);
+                      setPendingMapPlacementCamId(cam.id);
+                    }}
                   >
                   <span
                     className={`status-dot ${streamUiStatus[canonicalDeviceId(cam.id)] ?? "offline"}`}
