@@ -4,6 +4,7 @@ from aiohttp import web
 import cv2
 import numpy as np
 import config 
+import os
 
 # ✅ 기존 라이브러리 및 클래스 유지
 from Raspbot_Lib import Raspbot
@@ -12,6 +13,9 @@ from control import RobotController
 # 글로벌 변수
 shared_frame = None
 global_bot = None
+UPLOAD_WIDTH = int(os.getenv("ROBOT_UPLOAD_WIDTH", "1280"))
+UPLOAD_HEIGHT = int(os.getenv("ROBOT_UPLOAD_HEIGHT", "720"))
+UPLOAD_JPEG_QUALITY = int(os.getenv("ROBOT_UPLOAD_JPEG_QUALITY", "92"))
 
 # 소켓 설정 (React 서버 주소 허용)
 sio_server = socketio.AsyncServer(async_mode='aiohttp', cors_allowed_origins='*')
@@ -50,8 +54,8 @@ async def camera_loop():
     global shared_frame
     cap = cv2.VideoCapture(0)
     # 대역폭 최적화
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 320)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 240)
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, UPLOAD_WIDTH)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, UPLOAD_HEIGHT)
     while True:
         ret, frame = cap.read()
         if ret: shared_frame = frame
@@ -63,7 +67,7 @@ async def upload_task():
         while True:
             if shared_frame is not None:
                 try:
-                    _, img = cv2.imencode('.jpg', shared_frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
+                    _, img = cv2.imencode('.jpg', shared_frame, [cv2.IMWRITE_JPEG_QUALITY, UPLOAD_JPEG_QUALITY])
                     data = aiohttp.FormData()
                     data.add_field('file', img.tobytes(), filename='f.jpg', content_type='image/jpeg')
                     # 웹 대시보드 로봇 섹션 ID와 일치하도록 ROBOT_1로 전송

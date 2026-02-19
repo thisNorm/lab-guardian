@@ -566,6 +566,7 @@ def system_runtime():
 async def upload_frame(robot_id: str, file: UploadFile = File(...)):
     try:
         normalized_id = canonical_cam_id(robot_id)
+        is_robot_source = normalized_id.upper().startswith("ROBOT")
         contents = await file.read()
         nparr = np.frombuffer(contents, np.uint8)
         frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
@@ -582,14 +583,15 @@ async def upload_frame(robot_id: str, file: UploadFile = File(...)):
         if normalized_id != robot_id:
             camera_streams[robot_id] = frame
         # 감시 활성 상태가 아니면 탐지/알림은 생략 (스트림 연결과 분리)
-        if normalized_id not in monitoring_enabled:
+        # 로봇 업로드 스트림은 viewer 인증/감시 시작 타이밍과 무관하게 탐지되어야 함.
+        if (normalized_id not in monitoring_enabled) and (not is_robot_source):
             return {"status": "ignored"}
 
         annotated_frame, new_ids = process_detection(
             normalized_id,
             frame,
             current_time,
-            require_verified_viewer=True,
+            require_verified_viewer=not is_robot_source,
         )
 
         recorder.process_frame(normalized_id, frame, current_time)

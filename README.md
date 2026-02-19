@@ -1,6 +1,6 @@
-﻿# 🛡️ ETRI Lab Guardian System
-> **AI 기반 객체 인식 및 로봇 원격 대응을 위한 로봇·카메라 통합 시스템의 설계, 구현 및 운영**
-> <br/>(Design, Implementation, and Operation of an AI-Based Integrated Robot–Camera System for Object Recognition and Remote Robotic Response)
+﻿# AegisView (ETRI Lab Guardian)
+> **폐쇄망 AI 객체 인식 기반 지능형 대응 플랫폼의 설계, 구현 및 운영**
+> <br/>(Design, Implementation, and Operation of a Closed-Network AI Object Recognition-Based Intelligent Response Platform)
 
 <div align="center">
 
@@ -21,7 +21,7 @@
 
 ## 📖 Project Overview
 
-**Lab Guardian**는 폐쇄망 환경에서 동작하는 **AI 기반 객체 인식 및 로봇 원격 대응을 위한 로봇·카메라 통합 시스템**입니다.  
+**AegisView(ETRI Lab Guardian)는 폐쇄망 환경에서 동작하는 **AI 기반 객체 인식 및 로봇 원격 대응을 위한 로봇·카메라 통합 시스템**입니다.  
 고정형 CCTV와 이동형 로봇(Raspbot)을 통합 관리하며, AI 객체 인식을 통해 위험 상황을 실시간으로 탐지하고 **관리자가 웹 대시보드에서 로봇 영상을 확인하며 원격 수동 조종으로 현장을 확인**할 수 있도록 설계되었습니다.
 
 본 시스템은 **AI 탐지·추적과 같은 연산 집약적 작업은 Python 기반 알고리즘 서버(FastAPI)** 에서 수행하고, **이벤트 수신·저장·브로드캐스트와 같은 I/O 중심 처리는 C# 기반 게이트웨이 서버**에서 전담하도록 역할을 분리하여 실시간 환경에서의 병목과 지연을 최소화했습니다.
@@ -35,7 +35,7 @@
 ### ✨ Key System Features
 * **📸 Smart Evidence Recording:** 위험 감지 시 **즉시 스냅샷**을 촬영하고 **10초간 영상을 녹화**하여 로컬 스토리지에 자동 저장.
 * **🖼️ Static Image Server:** FastAPI의 `StaticFiles`를 활용해 저장된 증거 자료를 웹 브라우저에서 URL 링크로 즉시 확인 가능한 이미지 서버 구축.
-* **📱 Real-time Telegram Alert:** 침입자 감지 시 보안 담당자의 텔레그램으로 현장 사진과 경고 메시지를 즉시 전송 (방화벽 우회 처리 적용).
+* **Real-time Telegram Alert:** 사람 객체 위험 이벤트 감지 시 보안 담당자의 텔레그램으로 현장 사진과 경고 메시지를 즉시 전송 (방화벽 우회 처리 적용).
 * **📂 Modular Architecture:** `main.py`의 비대화를 막기 위해 `functions/` 폴더(AI, 녹화, 알림, DB)로 핵심 로직을 분리하여 유지보수성 강화.
 * **Integrated C# Gateway:** 엣지 장치에서 전송된 `이미지 경로(Path)` 데이터를 파싱하여 SQLite DB에 메타데이터로 저장하는 고성능 허브.
 * **Compute/I-O 분리 설계:** 연산 집약적 AI 처리는 Python, I/O 중심 로그 저장은 C# 게이트웨이에서 수행하도록 분리.
@@ -111,7 +111,7 @@ graph LR
 
 | **상태 (Status)** | **내용 (Message)** | **비고**             |
 |-------------------|--------------------|--------------------|
-| DANGER            | 🚨 침입자 감지! (📸 스냅샷)        | 이미지 경로 포함, 즉시 텔레그램 전송 및 녹화 시작 |
+| DANGER            | 사람 객체 위험 이벤트 감지 (스냅샷) | 이미지 경로 포함, 즉시 텔레그램 전송 및 녹화 시작 |
 | SAFE              | ✅ 이상 없음 (정기 보고)  | 10분 주기 하트비트 보고     |
 | CONNECTED         | 🌐 장치 연결 성공        | 장치 최초 접속 시 기록      |
 | DISCONNECTED      | ❌ 장치 연결 끊김         | 5초 이상 신호 부재 시 기록   |

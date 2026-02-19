@@ -95,9 +95,9 @@ const INITIAL_NEW_CAMERA_FORM: NewCameraForm = {
 };
 
 const QUALITY_STREAM_CONFIG: Record<Quality, { width: number; height: number; fps: number; quality: number; label: string }> = {
-  FHD: { width: 1280, height: 720, fps: 20, quality: 88, label: "FHD" },
-  HD: { width: 960, height: 540, fps: 14, quality: 68, label: "HD" },
-  SD: { width: 480, height: 270, fps: 8, quality: 48, label: "SD" },
+  FHD: { width: 1920, height: 1080, fps: 22, quality: 92, label: "FHD" },
+  HD: { width: 1280, height: 720, fps: 14, quality: 72, label: "HD" },
+  SD: { width: 640, height: 360, fps: 8, quality: 50, label: "SD" },
 };
 
 const DEFAULT_CAMERAS: CameraItem[] = [];
@@ -327,6 +327,7 @@ function App() {
   const [focusedCamId, setFocusedCamId] = useState<string | null>(DEFAULT_CAMERAS[0]?.id ?? null);
   const [streamRetryMap, setStreamRetryMap] = useState<Record<string, number>>({});
   const [streamUiStatus, setStreamUiStatus] = useState<Record<string, CamStatus>>({});
+  const streamHealthRef = useRef<Record<string, { lastOkAt: number; errorCount: number }>>({});
   const camerasRef = useRef<CameraItem[]>([]);
   const monitoringStartedRef = useRef<Set<string>>(new Set());
   const timelineLogSeenRef = useRef<Set<string>>(new Set());
@@ -368,11 +369,14 @@ function App() {
   const buildStreamUrl = (camId: string) => {
     const normalizedCamId = canonicalDeviceId(camId);
     const retry = streamRetryMap[normalizedCamId] ?? 0;
-    return `${NETWORK_CONFIG.ALGO_API_URL}/video_feed/${encodeURIComponent(normalizedCamId)}?r=${retry}`;
+    const cam = cameras.find((c) => sameDeviceId(c.id, normalizedCamId));
+    const qualityTag = cam?.quality ?? "SD";
+    return `${NETWORK_CONFIG.ALGO_API_URL}/video_feed/${encodeURIComponent(normalizedCamId)}?r=${retry}&q=${encodeURIComponent(qualityTag)}`;
   };
 
   const bumpStreamRetry = (camId: string) => {
-    setStreamRetryMap((prev) => ({ ...prev, [camId]: (prev[camId] ?? 0) + 1 }));
+    const normalizedCamId = canonicalDeviceId(camId);
+    setStreamRetryMap((prev) => ({ ...prev, [normalizedCamId]: (prev[normalizedCamId] ?? 0) + 1 }));
   };
 
   const bumpStreamRetryThrottled = (camId: string) => {
@@ -382,6 +386,48 @@ function App() {
     lastRetryAtRef.current[camId] = now;
     bumpStreamRetry(camId);
   };
+
+  const markStreamLoaded = (camId: string) => {
+    const key = canonicalDeviceId(camId);
+    streamHealthRef.current[key] = { lastOkAt: Date.now(), errorCount: 0 };
+    setStreamUiStatus((prev) => ({ ...prev, [key]: "online" }));
+  };
+
+  const markStreamErrored = (camId: string) => {
+    const key = canonicalDeviceId(camId);
+    const now = Date.now();
+    const prev = streamHealthRef.current[key] ?? { lastOkAt: 0, errorCount: 0 };
+    const next = {
+      lastOkAt: prev.lastOkAt,
+      errorCount: prev.errorCount + 1,
+    };
+    streamHealthRef.current[key] = next;
+
+    // MJPEG는 간헐적인 소켓 끊김이 흔해서 바로 offline으로 내리지 않는다.
+    const msSinceLastOk = prev.lastOkAt ? now - prev.lastOkAt : Number.POSITIVE_INFINITY;
+    const shouldForceOffline = msSinceLastOk > 6000 || next.errorCount >= 4;
+    if (shouldForceOffline) {
+      setStreamUiStatus((statusPrev) => ({ ...statusPrev, [key]: "offline" }));
+    }
+    bumpStreamRetryThrottled(camId);
+  };
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const now = Date.now();
+      setStreamUiStatus((prev) => {
+        const next = { ...prev };
+        cameras.forEach((cam) => {
+          const key = canonicalDeviceId(cam.id);
+          const health = streamHealthRef.current[key];
+          if (!health?.lastOkAt) return;
+          if (now - health.lastOkAt > 10000) next[key] = "offline";
+        });
+        return next;
+      });
+    }, 2000);
+    return () => clearInterval(timer);
+  }, [cameras]);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.tree, JSON.stringify(tree));
@@ -503,7 +549,16 @@ function App() {
 
     const pollRecentLogs = async () => {
       try {
-        const res = await fetch(`${NETWORK_CONFIG.GATEWAY_URL}/api/logs/recent?take=200`);
+        const res = await fetch(
+          `${NETWORK_CONFIG.GATEWAY_URL}/api/logs/recent?take=200&_=${Date.now()}`,
+          {
+            cache: "no-store",
+            headers: {
+              "Cache-Control": "no-cache",
+              Pragma: "no-cache",
+            },
+          }
+        );
         if (!res.ok) return;
         const data = await res.json();
         const items: GatewayRecentLogItem[] = Array.isArray(data?.items) ? data.items : [];
@@ -1288,19 +1343,8 @@ function App() {
                           <img
                             src={buildStreamUrl(cam.id)}
                             alt={cam.id}
-                            onError={() => {
-                              // Retry stream endpoint when the current mjpeg socket is broken.
-                              // Throttled to avoid reconnect storm that can affect other feeds.
-                              setStreamUiStatus((prev) => ({
-                                ...prev,
-                                [canonicalDeviceId(cam.id)]: "offline",
-                              }));
-                              bumpStreamRetryThrottled(cam.id);
-                            }}
-                            onLoad={() => {
-                              const key = canonicalDeviceId(cam.id);
-                              setStreamUiStatus((prev) => ({ ...prev, [key]: "online" }));
-                            }}
+                            onError={() => markStreamErrored(cam.id)}
+                            onLoad={() => markStreamLoaded(cam.id)}
                           />
                         </button>
                       </>
@@ -1695,7 +1739,8 @@ function App() {
             <img
               src={buildStreamUrl(singleViewCam)}
               alt={singleViewCam}
-              onError={() => bumpStreamRetryThrottled(singleViewCam)}
+              onError={() => markStreamErrored(singleViewCam)}
+              onLoad={() => markStreamLoaded(singleViewCam)}
             />
             <div className="single-fallback">NO SIGNAL</div>
           </div>

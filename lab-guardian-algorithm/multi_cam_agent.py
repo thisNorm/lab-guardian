@@ -5,6 +5,7 @@ import numpy as np
 import config 
 import sys
 import platform
+import os
 
 try:
     import pyrealsense2 as rs
@@ -12,7 +13,9 @@ except ImportError:
     rs = None
 
 SERVER_IP = f"http://{config.PC_IP}:{config.PORT_ALGO}" 
-WIDTH, HEIGHT = 320, 240 
+WIDTH = int(os.getenv("AGENT_UPLOAD_WIDTH", "1280"))
+HEIGHT = int(os.getenv("AGENT_UPLOAD_HEIGHT", "720"))
+UPLOAD_JPEG_QUALITY = int(os.getenv("AGENT_UPLOAD_JPEG_QUALITY", "92"))
 IS_MAC = sys.platform == "darwin"
 USE_REALSENSE = getattr(config, "USE_REALSENSE", False)
 
@@ -30,7 +33,7 @@ class RealSenseCamera:
         try:
             self.pipeline = rs.pipeline()
             rs_config = rs.config()
-            rs_config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
+            rs_config.enable_stream(rs.stream.color, WIDTH, HEIGHT, rs.format.bgr8, 30)
             self.pipeline.start(rs_config)
             self.active = True
             print(f"✅ RealSense 연결 성공: {self.id}")
@@ -44,7 +47,7 @@ class RealSenseCamera:
                 color_frame = frames.get_color_frame()
                 if color_frame:
                     frame = np.asanyarray(color_frame.get_data())
-                    return self.id, cv2.resize(frame, (WIDTH, HEIGHT))
+                    return self.id, frame
             except Exception:
                 pass
         return self.id, None
@@ -75,8 +78,8 @@ class GenericCamera:
             # 2. MJPG 코덱 강제 (대역폭 사용량 감소)
             self.cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
             # 3. 전송 해상도 다이어트
-            self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 320)
-            self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 240)
+            self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, WIDTH)
+            self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, HEIGHT)
             self.cap.set(cv2.CAP_PROP_FPS, 30)
             print(f"✅ 최적화 모드로 카메라 연결: {self.id}")
         
@@ -130,7 +133,7 @@ def main():
             for cam in cameras:
                 cam_id, frame = cam.get_frame()
                 if frame is not None:
-                    _, img_encoded = cv2.imencode('.jpg', frame, [int(cv2.IMWRITE_JPEG_QUALITY), 85])
+                    _, img_encoded = cv2.imencode('.jpg', frame, [int(cv2.IMWRITE_JPEG_QUALITY), UPLOAD_JPEG_QUALITY])
                     files = {'file': ('image.jpg', img_encoded.tobytes(), 'image/jpeg')}
                     try:
                         session.post(
