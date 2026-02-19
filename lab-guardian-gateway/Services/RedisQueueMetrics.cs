@@ -19,7 +19,7 @@ public sealed class RedisQueueMetrics {
     }
 
     public async Task RunLogLoopAsync(CancellationToken ct) {
-        var timer = new PeriodicTimer(TimeSpan.FromSeconds(60));
+        var timer = new PeriodicTimer(TimeSpan.FromMinutes(30));
         while (await timer.WaitForNextTickAsync(ct)) {
             long dangerLen = await _redis.ListLengthAsync(RedisQueueConfig.DangerQueue);
             long eventLen = await _redis.ListLengthAsync(RedisQueueConfig.EventQueue);

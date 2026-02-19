@@ -37,6 +37,7 @@ interface TimelineEvent {
   id: string;
   cameraId: string;
   hour: number;
+  minute?: number;
   type: EventType;
 }
 
@@ -46,6 +47,14 @@ interface GatewayRealtimePayload {
   message?: string;
   time?: string;
   snapshot?: string | null;
+}
+
+interface GatewayRecentLogItem {
+  id: number | string;
+  camId?: string;
+  createdAt?: string;
+  cctvLog?: string | null;
+  robotLog?: string | null;
 }
 
 interface NewCameraForm {
@@ -127,6 +136,13 @@ const EVENT_COLOR: Record<EventType, string> = {
   disconn: "#f6c94a",
 };
 
+const EVENT_PRIORITY: Record<EventType, number> = {
+  conn: 1,
+  disconn: 1,
+  safe: 2,
+  danger: 3,
+};
+
 const MARKER_PRESETS = [
   { x: 30, y: 69, angle: 35 },
   { x: 52, y: 64, angle: -20 },
@@ -152,6 +168,13 @@ const mapGatewayStatusToEventType = (status?: string, message?: string): EventTy
   if (msg.includes("연결 성공")) return "conn";
   if (msg.includes("연결 끊김")) return "disconn";
   return null;
+};
+
+const mapRecentLogToEventType = (item: GatewayRecentLogItem): EventType | null => {
+  const raw = `${item.cctvLog || ""} ${item.robotLog || ""}`.toUpperCase();
+  const bracket = raw.match(/\[(.*?)\]/)?.[1]?.trim();
+  if (bracket) return mapGatewayStatusToEventType(bracket, raw);
+  return mapGatewayStatusToEventType(undefined, raw);
 };
 
 const INITIAL_TREE: FolderNode = {
@@ -305,6 +328,8 @@ function App() {
   const [streamRetryMap, setStreamRetryMap] = useState<Record<string, number>>({});
   const [streamUiStatus, setStreamUiStatus] = useState<Record<string, CamStatus>>({});
   const camerasRef = useRef<CameraItem[]>([]);
+  const monitoringStartedRef = useRef<Set<string>>(new Set());
+  const timelineLogSeenRef = useRef<Set<string>>(new Set());
   const uiSessionIdRef = useRef<string>("");
   const lastRetryAtRef = useRef<Record<string, number>>({});
 
@@ -375,6 +400,22 @@ function App() {
   }, [cameras]);
 
   useEffect(() => {
+    const alive = new Set(cameras.map((c) => canonicalDeviceId(c.id)));
+    monitoringStartedRef.current.forEach((id) => {
+      if (!alive.has(id)) monitoringStartedRef.current.delete(id);
+    });
+
+    cameras.forEach((cam) => {
+      const camId = canonicalDeviceId(cam.id);
+      if (!camId || monitoringStartedRef.current.has(camId)) return;
+      monitoringStartedRef.current.add(camId);
+      void fetch(`${NETWORK_CONFIG.ALGO_API_URL}/monitoring/start/${camId}`, { method: "POST" }).catch(() => {
+        monitoringStartedRef.current.delete(camId);
+      });
+    });
+  }, [cameraIdKey, cameras]);
+
+  useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.cameras, JSON.stringify(cameras));
   }, [cameraIdKey]);
 
@@ -431,8 +472,15 @@ function App() {
       if (!cameraId || !type) return;
 
       const hour = new Date().getHours();
+      const minute = new Date().getMinutes();
       setTimelineEvents((prev) => [
-        { id: `ev-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, cameraId, hour, type },
+        {
+          id: `ev-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          cameraId,
+          hour,
+          minute,
+          type,
+        },
         ...prev.slice(0, 1499),
       ]);
 
@@ -447,6 +495,55 @@ function App() {
     return () => {
       ws.close();
       gatewayWsRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    let disposed = false;
+
+    const pollRecentLogs = async () => {
+      try {
+        const res = await fetch(`${NETWORK_CONFIG.GATEWAY_URL}/api/logs/recent?take=200`);
+        if (!res.ok) return;
+        const data = await res.json();
+        const items: GatewayRecentLogItem[] = Array.isArray(data?.items) ? data.items : [];
+        if (items.length === 0 || disposed) return;
+
+        const newEvents: TimelineEvent[] = [];
+        for (const item of items) {
+          const eventKey = `db-${String(item.id)}`;
+          if (timelineLogSeenRef.current.has(eventKey)) continue;
+
+          const camId = canonicalDeviceId(String(item.camId || ""));
+          const type = mapRecentLogToEventType(item);
+          if (!camId || !type) {
+            timelineLogSeenRef.current.add(eventKey);
+            continue;
+          }
+
+          const created = item.createdAt ? new Date(item.createdAt) : new Date();
+          const hour = Number.isNaN(created.getHours()) ? new Date().getHours() : created.getHours();
+          const minute = Number.isNaN(created.getMinutes()) ? new Date().getMinutes() : created.getMinutes();
+          newEvents.push({ id: eventKey, cameraId: camId, hour, minute, type });
+          timelineLogSeenRef.current.add(eventKey);
+        }
+
+        if (newEvents.length > 0 && !disposed) {
+          setTimelineEvents((prev) => {
+            const merged = [...newEvents, ...prev];
+            return merged.slice(0, 1500);
+          });
+        }
+      } catch {
+        // ignore transient polling errors
+      }
+    };
+
+    void pollRecentLogs();
+    const timer = window.setInterval(pollRecentLogs, 2000);
+    return () => {
+      disposed = true;
+      window.clearInterval(timer);
     };
   }, []);
 
@@ -1225,7 +1322,9 @@ function App() {
             </div>
             <div className="timeline-rows">
               {cameras.map((cam) => {
-                const events = timelineEvents.filter((e) => sameDeviceId(e.cameraId, cam.id));
+                const events = timelineEvents
+                  .filter((e) => sameDeviceId(e.cameraId, cam.id))
+                  .sort((a, b) => EVENT_PRIORITY[a.type] - EVENT_PRIORITY[b.type]);
                 return (
                   <div key={`line-${cam.id}`} className="timeline-row-line">
                     <div className="cam-name">{cam.name}</div>
@@ -1236,7 +1335,7 @@ function App() {
                           key={event.id}
                           className="event-dot"
                           style={{
-                            left: `${(event.hour / 24) * 100}%`,
+                            left: `${(((event.hour + (event.minute ?? 0) / 60) / 24) * 100)}%`,
                             backgroundColor: EVENT_COLOR[event.type],
                           }}
                           title={`${event.type.toUpperCase()} / ${event.hour}시`}

@@ -13,6 +13,9 @@ public sealed class RedisEventWorker {
     private readonly int _batchSize;
     private readonly TimeSpan _batchFlushInterval;
     private readonly TimeSpan _idleDelay = TimeSpan.FromMilliseconds(50);
+    private readonly object _dlqLogLock = new();
+    private DateTime _lastDlqErrorLogUtc = DateTime.MinValue;
+    private static readonly TimeSpan DlqErrorLogInterval = TimeSpan.FromMinutes(30);
 
     public RedisEventWorker(
         IDatabase redis,
@@ -90,7 +93,7 @@ public sealed class RedisEventWorker {
             // DB 저장 실패 이벤트는 유실 대신 DLQ로 격리한다(자동 재처리는 하지 않음).
             // DLQ 적재까지 실패한 경우에만 최종 유실로 간주한다(best-effort).
             _metrics.IncrementDropped("db_error");
-            Console.WriteLine($"[Worker] DB save failed, isolating batch to DLQ (final drop only if DLQ push fails): {ex.Message}");
+            LogDlqIsolationErrorThrottled(ex.Message);
 
             foreach (var log in batch) {
                 try {
@@ -104,6 +107,22 @@ public sealed class RedisEventWorker {
             }
         } finally {
             batch.Clear();
+        }
+    }
+
+    private void LogDlqIsolationErrorThrottled(string message) {
+        var now = DateTime.UtcNow;
+        bool shouldLog = false;
+
+        lock (_dlqLogLock) {
+            if (now - _lastDlqErrorLogUtc >= DlqErrorLogInterval) {
+                _lastDlqErrorLogUtc = now;
+                shouldLog = true;
+            }
+        }
+
+        if (shouldLog) {
+            Console.WriteLine($"[Worker] DB save failed, isolating batch to DLQ (final drop only if DLQ push fails): {message}");
         }
     }
 }
