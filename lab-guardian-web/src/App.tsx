@@ -5,7 +5,7 @@ import { NETWORK_CONFIG } from "./common/config";
 
 type CamStatus = "online" | "offline";
 type Quality = "FHD" | "HD" | "SD";
-type EventType = "danger" | "safe" | "conn" | "disconn";
+type EventType = "danger" | "safe" | "conn" | "disconn" | "manual_on" | "manual_off";
 type Dir = "up" | "down" | "left" | "right" | "none";
 type SourceType = "USB" | "RTSP";
 type AddTargetType = "robot" | "cctv";
@@ -39,6 +39,13 @@ interface TimelineEvent {
   hour: number;
   minute?: number;
   type: EventType;
+  ts?: number;
+}
+interface TimelineClusterSelection {
+  cameraId: string;
+  startMinuteOfDay: number;
+  endMinuteOfDay: number;
+  events: TimelineEvent[];
 }
 
 interface GatewayRealtimePayload {
@@ -68,7 +75,11 @@ interface NewCameraForm {
 }
 
 const isRobotDevice = (cam?: CameraItem | null) =>
-  !!cam && (cam.id.toUpperCase().includes("ROBOT") || cam.name.toUpperCase().includes("ROBOT"));
+  !!cam && (
+    cam.id.toUpperCase().includes("ROBOT") ||
+    cam.name.toUpperCase().includes("ROBOT") ||
+    cam.sourceLabel.toUpperCase().includes("ROBOT")
+  );
 
 const ROOT_IP = NETWORK_CONFIG.PC_IP;
 const QUALITY_OPTIONS: Quality[] = ["FHD", "HD", "SD"];
@@ -134,13 +145,74 @@ const EVENT_COLOR: Record<EventType, string> = {
   safe: "#38d39f",
   conn: "#59a7ff",
   disconn: "#f6c94a",
+  manual_on: "#9b8cff",
+  manual_off: "#ff9e64",
 };
 
 const EVENT_PRIORITY: Record<EventType, number> = {
   conn: 1,
   disconn: 1,
+  manual_off: 2,
+  manual_on: 2,
   safe: 2,
   danger: 3,
+};
+
+const EVENT_LABEL: Record<EventType, string> = {
+  danger: "DANGER",
+  safe: "SAFE",
+  conn: "CONNECTED",
+  disconn: "DISCONNECTED",
+  manual_on: "원격수동조종 시작",
+  manual_off: "원격수동조종 종료",
+};
+
+const eventMinuteOfDay = (e: TimelineEvent) => ((e.hour * 60) + (e.minute ?? 0));
+const minuteOfDayToLabel = (value: number) => {
+  const h = Math.floor(value / 60);
+  const m = value % 60;
+  return `${h}시 ${m}분`;
+};
+
+const TIMELINE_RETENTION_MS = 24 * 60 * 60 * 1000;
+const TIMELINE_BUCKET_MINUTES = 15;
+const TIMELINE_DEDUP_WINDOW_MS = 5000;
+
+const pruneTimelineEvents = (events: TimelineEvent[], nowTs = Date.now()) => {
+  const now = new Date(nowTs);
+  const y = now.getFullYear();
+  const m = now.getMonth();
+  const d = now.getDate();
+
+  return events
+    .filter((e) => {
+      const ts = typeof e.ts === "number" ? e.ts : nowTs;
+      if (nowTs - ts >= TIMELINE_RETENTION_MS) return false;
+      const dt = new Date(ts);
+      // 타임라인 축(0~24시)이 "당일 시각" 기준이므로 전날 로그는 제거한다.
+      return dt.getFullYear() === y && dt.getMonth() === m && dt.getDate() === d;
+    })
+    .slice(0, 1500);
+};
+
+const isDuplicateTimelineEvent = (a: TimelineEvent, b: TimelineEvent) => {
+  if (!sameDeviceId(a.cameraId, b.cameraId)) return false;
+  if (a.type !== b.type) return false;
+  const ta = typeof a.ts === "number" ? a.ts : null;
+  const tb = typeof b.ts === "number" ? b.ts : null;
+  if (ta == null || tb == null) {
+    return a.hour === b.hour && (a.minute ?? 0) === (b.minute ?? 0);
+  }
+  return Math.abs(ta - tb) <= TIMELINE_DEDUP_WINDOW_MS;
+};
+
+const mergeTimelineEventsUnique = (prev: TimelineEvent[], incoming: TimelineEvent[]) => {
+  const next = [...prev];
+  for (const ev of incoming) {
+    const duplicated = next.some((x) => isDuplicateTimelineEvent(x, ev));
+    if (!duplicated) next.unshift(ev);
+  }
+  return pruneTimelineEvents(next);
 };
 
 const MARKER_PRESETS = [
@@ -159,12 +231,16 @@ const mapGatewayStatusToEventType = (status?: string, message?: string): EventTy
   if (normalized === "CONNECTED") return "conn";
   if (normalized === "DISCONNECTED") return "disconn";
   if (normalized === "FORCED_DISCONNECTED") return "disconn";
+  if (normalized === "MANUAL_ON") return "manual_on";
+  if (normalized === "MANUAL_OFF") return "manual_off";
   const msg = (message || "").toUpperCase();
   if (msg.includes("[DANGER]")) return "danger";
   if (msg.includes("[SAFE]")) return "safe";
   if (msg.includes("[CONNECTED]")) return "conn";
   if (msg.includes("[DISCONNECTED]")) return "disconn";
   if (msg.includes("[FORCED_DISCONNECTED]")) return "disconn";
+  if (msg.includes("[MANUAL_ON]")) return "manual_on";
+  if (msg.includes("[MANUAL_OFF]")) return "manual_off";
   if (msg.includes("연결 성공")) return "conn";
   if (msg.includes("연결 끊김")) return "disconn";
   return null;
@@ -280,9 +356,12 @@ function App() {
   });
 
   const [timelineEvents, setTimelineEvents] = useState<TimelineEvent[]>(() =>
-    parseJson<TimelineEvent[]>(localStorage.getItem(STORAGE_KEYS.timelineEvents), [])
-      .map((e) => ({ ...e, cameraId: canonicalDeviceId(e.cameraId) }))
+    pruneTimelineEvents(
+      parseJson<TimelineEvent[]>(localStorage.getItem(STORAGE_KEYS.timelineEvents), [])
+        .map((e) => ({ ...e, cameraId: canonicalDeviceId(e.cameraId), ts: typeof e.ts === "number" ? e.ts : Date.now() }))
+    )
   );
+  const [selectedTimelineCluster, setSelectedTimelineCluster] = useState<TimelineClusterSelection | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showMapPlacementModal, setShowMapPlacementModal] = useState(false);
   const [pendingMapPlacementCamId, setPendingMapPlacementCamId] = useState<string | null>(null);
@@ -403,31 +482,14 @@ function App() {
     };
     streamHealthRef.current[key] = next;
 
-    // MJPEG는 간헐적인 소켓 끊김이 흔해서 바로 offline으로 내리지 않는다.
+    // MJPEG는 간헐 오류가 잦으므로 단일 오류로 offline 처리하지 않는다.
     const msSinceLastOk = prev.lastOkAt ? now - prev.lastOkAt : Number.POSITIVE_INFINITY;
-    const shouldForceOffline = msSinceLastOk > 6000 || next.errorCount >= 4;
+    const shouldForceOffline = next.errorCount >= 3 && msSinceLastOk > 3000;
     if (shouldForceOffline) {
       setStreamUiStatus((statusPrev) => ({ ...statusPrev, [key]: "offline" }));
     }
-    bumpStreamRetryThrottled(camId);
+    if (shouldForceOffline) bumpStreamRetryThrottled(camId);
   };
-
-  useEffect(() => {
-    const timer = setInterval(() => {
-      const now = Date.now();
-      setStreamUiStatus((prev) => {
-        const next = { ...prev };
-        cameras.forEach((cam) => {
-          const key = canonicalDeviceId(cam.id);
-          const health = streamHealthRef.current[key];
-          if (!health?.lastOkAt) return;
-          if (now - health.lastOkAt > 10000) next[key] = "offline";
-        });
-        return next;
-      });
-    }, 2000);
-    return () => clearInterval(timer);
-  }, [cameras]);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.tree, JSON.stringify(tree));
@@ -472,6 +534,19 @@ function App() {
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.timelineEvents, JSON.stringify(timelineEvents));
   }, [timelineEvents]);
+
+  useEffect(() => {
+    if (!selectedTimelineCluster) return;
+    const hasCam = cameras.some((cam) => sameDeviceId(cam.id, selectedTimelineCluster.cameraId));
+    if (!hasCam) setSelectedTimelineCluster(null);
+  }, [cameras, selectedTimelineCluster]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setTimelineEvents((prev) => pruneTimelineEvents(prev));
+    }, 60 * 1000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     if (!findNodeById(tree, selectedTreeId)) {
@@ -519,23 +594,30 @@ function App() {
 
       const hour = new Date().getHours();
       const minute = new Date().getMinutes();
-      setTimelineEvents((prev) => [
-        {
-          id: `ev-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-          cameraId,
-          hour,
-          minute,
-          type,
-        },
-        ...prev.slice(0, 1499),
-      ]);
+      const nowTs = Date.now();
+      setTimelineEvents((prev) =>
+        mergeTimelineEventsUnique(prev, [
+          {
+            id: `ev-${nowTs}-${Math.random().toString(36).slice(2, 7)}`,
+            cameraId,
+            hour,
+            minute,
+            type,
+            ts: nowTs,
+          },
+        ])
+      );
 
-      if (type === "disconn") {
-        setStreamUiStatus((prev) => ({ ...prev, [cameraId]: "offline" }));
+      // 상태 점은 게이트웨이 disconn 이벤트보다 실제 스트림 렌더링(onLoad/onError)을 우선한다.
+      // disconn 이벤트만으로 즉시 빨강 전환하지 않는다.
+
+      // conn 이벤트가 자주 오면 스트림 재열기로 오히려 흔들릴 수 있어서
+      // 최근 프레임이 끊긴 경우에만 재시도 트리거.
+      if (type === "conn") {
+        const health = streamHealthRef.current[cameraId];
+        const isStale = !health?.lastOkAt || (Date.now() - health.lastOkAt > 5000);
+        if (isStale) bumpStreamRetryThrottled(cameraId);
       }
-
-      // If reconnect happened after a transient drop, force one stream refresh.
-      if (type === "conn") bumpStreamRetryThrottled(cameraId);
     };
 
     return () => {
@@ -576,18 +658,20 @@ function App() {
             continue;
           }
 
-          const created = item.createdAt ? new Date(item.createdAt) : new Date();
-          const hour = Number.isNaN(created.getHours()) ? new Date().getHours() : created.getHours();
-          const minute = Number.isNaN(created.getMinutes()) ? new Date().getMinutes() : created.getMinutes();
-          newEvents.push({ id: eventKey, cameraId: camId, hour, minute, type });
+          const now = new Date();
+          let created = item.createdAt ? new Date(item.createdAt) : now;
+          // 서버/클라이언트 시간대 차이로 미래 시간(예: 16~17시로 밀림)이 들어오면 현재 시각으로 보정
+          if (Number.isNaN(created.getTime()) || created.getTime() > now.getTime() + 5 * 60 * 1000) {
+            created = now;
+          }
+          const hour = created.getHours();
+          const minute = created.getMinutes();
+          newEvents.push({ id: eventKey, cameraId: camId, hour, minute, type, ts: created.getTime() });
           timelineLogSeenRef.current.add(eventKey);
         }
 
         if (newEvents.length > 0 && !disposed) {
-          setTimelineEvents((prev) => {
-            const merged = [...newEvents, ...prev];
-            return merged.slice(0, 1500);
-          });
+          setTimelineEvents((prev) => mergeTimelineEventsUnique(prev, newEvents));
         }
       } catch {
         // ignore transient polling errors
@@ -1086,11 +1170,15 @@ function App() {
     if (!target) return;
 
     // Optimistic UI cleanup first so "해제" responds immediately even if API is slow/unreachable.
-    const hour = new Date().getHours();
-    setTimelineEvents((prev) => [
-      { id: `ev-${Date.now()}`, cameraId: canonicalDeviceId(cameraId), hour, type: "disconn" },
-      ...prev.filter((e) => !sameDeviceId(e.cameraId, cameraId)),
-    ]);
+    const now = new Date();
+    const hour = now.getHours();
+    const minute = now.getMinutes();
+    setTimelineEvents((prev) =>
+      pruneTimelineEvents([
+        { id: `ev-${Date.now()}`, cameraId: canonicalDeviceId(cameraId), hour, minute, type: "disconn", ts: Date.now() },
+        ...prev.filter((e) => !sameDeviceId(e.cameraId, cameraId)),
+      ])
+    );
 
     setCameras((prev) => prev.filter((cam) => cam.id !== cameraId));
     setMarkers((prev) => prev.filter((m) => m.cameraId !== cameraId));
@@ -1131,6 +1219,56 @@ function App() {
     setMarkers((prev) => prev.map((m) => (
       m.id === selectedMarkerId ? { ...m, angle: m.angle + delta } : m
     )));
+  };
+
+  const appendControlSessionLog = (cameraId: string, mode: "enter" | "exit") => {
+    const normalizedCamId = canonicalDeviceId(cameraId);
+    const now = new Date();
+    const nowTs = now.getTime();
+    const eventType: EventType = mode === "enter" ? "manual_on" : "manual_off";
+
+    // 서버 응답과 무관하게 UI 타임라인에는 즉시 반영한다.
+    setTimelineEvents((prev) =>
+      mergeTimelineEventsUnique(prev, [
+        {
+          id: `ctrl-local-${mode}-${nowTs}-${Math.random().toString(36).slice(2, 6)}`,
+          cameraId: normalizedCamId,
+          hour: now.getHours(),
+          minute: now.getMinutes(),
+          type: eventType,
+          ts: nowTs,
+        },
+      ])
+    );
+
+    const status = mode === "enter" ? "MANUAL_ON" : "MANUAL_OFF";
+    const message = mode === "enter" ? "[MANUAL_ON] 확대 모드 진입" : "[MANUAL_OFF] 멀티뷰 복귀";
+    void fetch(`${NETWORK_CONFIG.GATEWAY_URL}/api/logs/manual`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        camId: normalizedCamId,
+        status,
+        message,
+      }),
+    }).then((res) => {
+      if (!res.ok) throw new Error(`manual log failed: ${res.status}`);
+    }).catch((err) => {
+      console.warn("[manual-log] gateway 전송 실패", err);
+    });
+  };
+
+  const toggleSingleView = (cameraId: string) => {
+    setSingleViewCam((prev) => {
+      const next = prev === cameraId ? null : cameraId;
+      if (!prev && next) appendControlSessionLog(cameraId, "enter");
+      if (prev && !next) appendControlSessionLog(cameraId, "exit");
+      if (prev && next && prev !== next) {
+        appendControlSessionLog(prev, "exit");
+        appendControlSessionLog(next, "enter");
+      }
+      return next;
+    });
   };
 
   const addFolderByNode = (targetId: string) => {
@@ -1338,7 +1476,7 @@ function App() {
                         <button
                           type="button"
                           className="stream-btn"
-                          onClick={() => setSingleViewCam((prev) => (prev === cam.id ? null : cam.id))}
+                          onClick={() => toggleSingleView(cam.id)}
                         >
                           <img
                             src={buildStreamUrl(cam.id)}
@@ -1358,38 +1496,122 @@ function App() {
           <section className="timeline-panel">
             <div className="panel-head">타임라인 로그 (선형)</div>
             <div className="timeline-scale">
-              {Array.from({ length: 25 }, (_, i) => (
-                <div key={`tick-${i}`} className="tick" style={{ left: `${(i / 24) * 100}%` }}>
-                  <span>{i}</span>
-                </div>
-              ))}
+              <div className="timeline-scale-spacer" />
+              <div className="timeline-scale-track">
+                {Array.from({ length: 25 }, (_, i) => (
+                  <div key={`tick-${i}`} className="tick" style={{ left: `${(i / 24) * 100}%` }}>
+                    <span>{i}</span>
+                  </div>
+                ))}
+              </div>
             </div>
             <div className="timeline-rows">
               {cameras.map((cam) => {
                 const events = timelineEvents
                   .filter((e) => sameDeviceId(e.cameraId, cam.id))
-                  .sort((a, b) => EVENT_PRIORITY[a.type] - EVENT_PRIORITY[b.type]);
+                  .sort((a, b) => eventMinuteOfDay(a) - eventMinuteOfDay(b));
+                const clusters = Array.from(
+                  events.reduce((map, event) => {
+                    const minuteOfDay = eventMinuteOfDay(event);
+                    const bucketStart =
+                      Math.floor(minuteOfDay / TIMELINE_BUCKET_MINUTES) * TIMELINE_BUCKET_MINUTES; // 00/15/30/45 분 기준
+                    if (!map.has(bucketStart)) map.set(bucketStart, [] as TimelineEvent[]);
+                    map.get(bucketStart)!.push(event);
+                    return map;
+                  }, new Map<number, TimelineEvent[]>())
+                )
+                  .sort((a, b) => a[0] - b[0])
+                  .map(([bucketStart, bucketEvents]) => {
+                    const repr = [...bucketEvents].sort((a, b) => EVENT_PRIORITY[b.type] - EVENT_PRIORITY[a.type])[0];
+                    const bucketEnd = Math.min(bucketStart + TIMELINE_BUCKET_MINUTES - 1, 1439);
+                    const hasMultiple = bucketEvents.length > 1;
+                    const firstMinute = eventMinuteOfDay(bucketEvents[0]);
+                    return {
+                      key: `k-${cam.id}-${bucketStart}`,
+                      events: bucketEvents,
+                      // 단일 로그는 실제 분 위치, 복수 로그만 15분 버킷 시작(00/15/30/45)에 고정
+                      leftPct: ((hasMultiple ? bucketStart : firstMinute) / (24 * 60)) * 100,
+                      reprType: repr.type,
+                      startMinuteOfDay: hasMultiple ? bucketStart : firstMinute,
+                      endMinuteOfDay: hasMultiple ? bucketEnd : firstMinute,
+                    };
+                  });
                 return (
                   <div key={`line-${cam.id}`} className="timeline-row-line">
                     <div className="cam-name">{cam.name}</div>
                     <div className="line-track">
                       <div className="base-line" />
-                      {events.map((event) => (
-                        <div
-                          key={event.id}
-                          className="event-dot"
+                      {clusters.map((cluster) => (
+                        <button
+                          key={`${cam.id}-${cluster.key}`}
+                          type="button"
+                          className={`event-dot ${cluster.events.length > 1 ? "event-cluster" : ""}`}
                           style={{
-                            left: `${(((event.hour + (event.minute ?? 0) / 60) / 24) * 100)}%`,
-                            backgroundColor: EVENT_COLOR[event.type],
+                            left: `${cluster.leftPct}%`,
+                            backgroundColor: EVENT_COLOR[cluster.reprType],
                           }}
-                          title={`${event.type.toUpperCase()} / ${event.hour}시`}
-                        />
+                          title={
+                            cluster.startMinuteOfDay === cluster.endMinuteOfDay
+                              ? `${minuteOfDayToLabel(cluster.startMinuteOfDay)} / ${cluster.events.length}건`
+                              : `${minuteOfDayToLabel(cluster.startMinuteOfDay)} ~ ${minuteOfDayToLabel(cluster.endMinuteOfDay)} / ${cluster.events.length}건`
+                          }
+                          onClick={() => setSelectedTimelineCluster({
+                            cameraId: cam.id,
+                            startMinuteOfDay: cluster.startMinuteOfDay,
+                            endMinuteOfDay: cluster.endMinuteOfDay,
+                            events: cluster.events,
+                          })}
+                        >
+                          {cluster.events.length > 1 ? cluster.events.length : ""}
+                        </button>
                       ))}
                     </div>
                   </div>
                 );
               })}
             </div>
+            {selectedTimelineCluster && (
+              <div className="timeline-detail">
+                <div className="timeline-detail-head">
+                  <strong>
+                    {cameraMap.get(selectedTimelineCluster.cameraId)?.name ?? selectedTimelineCluster.cameraId}
+                  </strong>
+                  <span>
+                    {selectedTimelineCluster.startMinuteOfDay === selectedTimelineCluster.endMinuteOfDay
+                      ? `${minuteOfDayToLabel(selectedTimelineCluster.startMinuteOfDay)}`
+                      : `${minuteOfDayToLabel(selectedTimelineCluster.startMinuteOfDay)} ~ ${minuteOfDayToLabel(selectedTimelineCluster.endMinuteOfDay)}`
+                    } · {selectedTimelineCluster.events.length}건
+                  </span>
+                  <button type="button" onClick={() => setSelectedTimelineCluster(null)}>닫기</button>
+                </div>
+                <div className="timeline-detail-list">
+                  {Array.from(
+                    selectedTimelineCluster.events
+                      .sort((a, b) => eventMinuteOfDay(a) - eventMinuteOfDay(b))
+                      .reduce((map, event) => {
+                        const minuteKey = eventMinuteOfDay(event);
+                        if (!map.has(minuteKey)) map.set(minuteKey, [] as TimelineEvent[]);
+                        map.get(minuteKey)!.push(event);
+                        return map;
+                      }, new Map<number, TimelineEvent[]>())
+                  ).map(([minuteKey, list]) => (
+                    <div key={`g-${minuteKey}`} className="timeline-detail-group">
+                      <div className="timeline-detail-time">{minuteOfDayToLabel(minuteKey)}</div>
+                      <div className="timeline-detail-list">
+                        {list
+                          .sort((a, b) => EVENT_PRIORITY[b.type] - EVENT_PRIORITY[a.type])
+                          .map((event) => (
+                            <div key={event.id} className="timeline-detail-item">
+                              <span className="dot" style={{ backgroundColor: EVENT_COLOR[event.type] }} />
+                              <span>{EVENT_LABEL[event.type]}</span>
+                            </div>
+                          ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </section>
         </main>
 
@@ -1467,7 +1689,7 @@ function App() {
                               setSelectedMarkerId(marker.id);
                               setFocusedCamId(marker.cameraId);
                             }}
-                            onDoubleClick={() => setSingleViewCam(marker.cameraId)}
+                            onDoubleClick={() => toggleSingleView(marker.cameraId)}
                           >
                             {isRobot ? "🤖" : "📹"}
                           </button>
@@ -1733,9 +1955,9 @@ function App() {
         <div className="single-view-overlay">
           <div className="single-head">
             <div>{cameraMap.get(singleViewCam)?.name ?? singleViewCam}</div>
-            <button type="button" onClick={() => setSingleViewCam(null)}>닫기</button>
+            <button type="button" onClick={() => toggleSingleView(singleViewCam!)}>닫기</button>
           </div>
-          <div className="single-body" onClick={() => setSingleViewCam(null)}>
+          <div className="single-body" onClick={() => toggleSingleView(singleViewCam!)}>
             <img
               src={buildStreamUrl(singleViewCam)}
               alt={singleViewCam}

@@ -75,8 +75,61 @@ app.MapGet("/api/logs/recent", (int? take, string? type) => {
 
     return Results.Json(new { count = items.Count, items });
 });
+
 var allSockets = new List<IWebSocketConnection>();
 var socketLock = new object();
+
+app.MapPost("/api/logs/manual", async (HttpRequest request) => {
+    try {
+        using var reader = new StreamReader(request.Body, Encoding.UTF8);
+        var raw = await reader.ReadToEndAsync();
+        if (string.IsNullOrWhiteSpace(raw)) return Results.BadRequest(new { message = "empty body" });
+
+        using var doc = JsonDocument.Parse(raw);
+        var root = doc.RootElement;
+
+        string camId = root.TryGetProperty("camId", out var camIdEl) ? (camIdEl.GetString() ?? "").Trim() : "";
+        string status = root.TryGetProperty("status", out var statusEl) ? (statusEl.GetString() ?? "").Trim() : "";
+        string message = root.TryGetProperty("message", out var msgEl) ? (msgEl.GetString() ?? "").Trim() : "";
+
+        if (string.IsNullOrWhiteSpace(camId) || string.IsNullOrWhiteSpace(status)) {
+            return Results.BadRequest(new { message = "camId/status required" });
+        }
+
+        bool isRobot = camId.Contains("ROBOT", StringComparison.OrdinalIgnoreCase);
+        string merged = string.IsNullOrWhiteSpace(message) ? $"[{status}]" : message;
+
+        using (var db = new LabDbContext()) {
+            var row = new EventLog {
+                CamId = camId,
+                CreatedAt = DateTime.Now,
+                CctvLog = isRobot ? null : merged,
+                RobotLog = isRobot ? merged : null,
+            };
+            db.EventLogs.Add(row);
+            await db.SaveChangesAsync();
+        }
+
+        var payload = JsonSerializer.Serialize(new {
+            camId,
+            status,
+            message = merged,
+            time = DateTime.Now.ToString("HH:mm:ss"),
+        });
+
+        Console.WriteLine($"[MANUAL] camId={camId} status={status} message={merged}");
+
+        lock (socketLock) {
+            foreach (var ws in allSockets.ToList()) {
+                if (ws.IsAvailable) ws.Send(payload);
+            }
+        }
+
+        return Results.Json(new { ok = true });
+    } catch (Exception ex) {
+        return Results.Problem(ex.Message, statusCode: 500);
+    }
+});
 var websocketServer = new WebSocketServer("ws://0.0.0.0:8080");
 
 websocketServer.Start(socket => {
