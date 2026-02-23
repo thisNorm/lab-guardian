@@ -70,9 +70,11 @@ OPENCV_FFMPEG_CAPTURE_OPTIONS = os.getenv(
 )
 os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = OPENCV_FFMPEG_CAPTURE_OPTIONS
 
-if not TELEGRAM_TOKEN or not PC_IP:
-    print("❌[오류] .env 파일 설정이 누락되었습니다.")
+if not PC_IP:
+    print("❌[오류] .env 파일 설정이 누락되었습니다. (PC_IP)")
     sys.exit(1)
+if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
+    print("⚠️[주의] TELEGRAM_TOKEN 또는 TELEGRAM_CHAT_ID가 비어 있어 텔레그램 알림이 비활성화됩니다.")
 # ======================================================
 
 @asynccontextmanager
