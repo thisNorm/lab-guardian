@@ -53,24 +53,6 @@
       white-space: nowrap;
       display: none;
     }
-    .nav-btn {
-      position:absolute; top:50%; transform:translateY(-50%);
-      width:44px; height:44px;
-      border-radius:999px;
-      display:flex; align-items:center; justify-content:center;
-      background:rgba(15,23,42,.75);
-      border:1px solid rgba(148,163,184,.2);
-      color:#e2e8f0;
-      z-index:9999;
-      cursor:pointer;
-      transition:.15s ease;
-      opacity:.32;
-      user-select:none;
-    }
-    .nav-btn:hover { transform: translateY(-50%) scale(1.05); border-color: rgba(59,130,246,.45); opacity:.95; }
-    .nav-btn:active { transform: translateY(-50%) scale(.98); }
-    .nav-prev { left:14px; }
-    .nav-next { right:14px; }
     .scale-wrap{
       transform-origin:center center;
       will-change:transform;
@@ -386,7 +368,6 @@
       z-index: 4 !important;
       box-sizing: border-box !important;
     }
-
     
     section[data-index="4"] .process-steps {
       align-items: flex-start !important;
@@ -3374,8 +3355,6 @@
   <div class="scale-wrap" id="scaleWrap">
     <div class="deck" id="deck">
       <div class="kbd-help" id="kbdHelp">←/→ 이동 · 숫자(1~9) 점프 · Home/End · Esc 전체화면</div>
-      <div class="nav-btn nav-prev" id="btnPrev" title="Prev (←)"><i class="fas fa-chevron-left"></i></div>
-      <div class="nav-btn nav-next" id="btnNext" title="Next (→)"><i class="fas fa-chevron-right"></i></div>
       <div class="demo-zoom-overlay" id="demoZoomOverlay" aria-hidden="true">
         <img id="demoZoomImg" alt="확대 이미지" />
         <div class="zoom-hint">클릭해서 닫기</div>
@@ -3672,7 +3651,7 @@
 <span class="card-icon"><i class="fas fa-brain"></i></span>
                     AI Compute Server
                 </div>
-<p class="card-desc">영상 소스 생성 및 전송</p>
+<p class="card-desc">실시간 객체 인식 및 추론</p>
 <div class="mt-1">
 <span class="tech-tag">FastAPI</span>
 <span class="tech-tag">YOLOv8</span>
@@ -3753,7 +3732,7 @@
 <div class="header">
 <div class="header-title">
 <i class="fas fa-random"></i>
-                표준 이벤트 흐름 (Standard Event Flow)
+                표준 이벤트 흐름
             </div>
 <div class="etri-logo-small">ETRI 자율형 IoT 연구실</div>
 </div>
@@ -3761,7 +3740,7 @@
 <div class="content-area">
 
 <div class="status-section">
-<div class="section-header">이벤트 상태 정의 (Event States)</div>
+<div class="section-header">이벤트 상태 정의</div>
 <div class="status-grid">
 
 <div class="status-card danger">
@@ -3798,7 +3777,7 @@
 </div>
 </div>
 
-<div class="section-header">이벤트 처리 절차 (Processing Pipeline)</div>
+<div class="section-header">이벤트 처리 절차</div>
 <div class="flow-section">
 <div class="process-steps">
 <div class="process-line"></div>
@@ -3981,46 +3960,45 @@
 <div class="header">
 <div class="header-title">
 <i class="fas fa-images"></i>
-            UI 설계 레퍼런스
+            상용 관제 시스템 UI 분석 및 설계 반영
         </div>
 <div class="etri-logo-small">ETRI 자율형 IoT 연구실</div>
 </div>
 
-<div class="content-area" style="flex-direction:column;padding:8px 14px;gap:4px;height:620px;box-sizing:border-box;overflow:hidden;">
+<div class="content-area" style="flex-direction:column;padding:8px 14px;gap:6px;height:620px;box-sizing:border-box;overflow:hidden;">
   <div style="text-align:center;">
-    <div style="font-size:18px;font-weight:800;color:#e2e8f0;line-height:1.1;">AegisView UI Reference Study</div>
+    <div style="font-size:18px;font-weight:800;color:#e2e8f0;line-height:1.1;">상용 관제 시스템 UI 분석 및 설계 반영</div>
     <div style="font-size:11px;color:#94a3b8;margin-top:2px;">
-      서비스 트리, 멀티뷰, 타임라인, 맵 기반 배치 UX 레퍼런스를 참고하여 현재 UI를 설계·구현
+      참고 UI 장점을 관제 구조 / 이벤트 처리 / 대시보드 가시성 관점으로 그룹화
     </div>
   </div>
 
-  <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));grid-template-rows:repeat(3,minmax(0,1fr));gap:4px;flex:1;min-height:0;">
-    <div style="background:rgba(15,23,42,.68);border:1px solid rgba(59,130,246,.28);border-radius:6px;overflow:hidden;display:flex;align-items:center;justify-content:center;padding:0;min-height:0;">
-      <img src="references/reference1.png" alt="reference1" style="width:100%;height:100%;object-fit:cover;display:block;"/>
+  <div style="display:grid;grid-template-rows:repeat(3,minmax(0,1fr));gap:6px;flex:1;min-height:0;">
+    <div style="background:rgba(15,23,42,.35);border:1px solid rgba(59,130,246,.25);border-radius:8px;padding:4px;display:grid;grid-template-rows:auto 1fr;gap:4px;min-height:0;">
+      <div style="font-size:12px;font-weight:700;color:#bfdbfe;padding:0 4px;"><i class="fas fa-sitemap mr-1"></i>구성/조작 패턴 참고: 서비스 트리 · 멀티뷰 · 제어 패널</div>
+      <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px;min-height:0;">
+        <div style="border:1px solid rgba(59,130,246,.28);border-radius:6px;overflow:hidden;min-height:0;"><img src="references/reference2.png" alt="reference2" style="width:100%;height:100%;object-fit:cover;display:block;"/></div>
+        <div style="border:1px solid rgba(59,130,246,.28);border-radius:6px;overflow:hidden;min-height:0;"><img src="references/reference6.png" alt="reference6" style="width:100%;height:100%;object-fit:cover;display:block;"/></div>
+        <div style="border:1px solid rgba(59,130,246,.28);border-radius:6px;overflow:hidden;min-height:0;"><img src="references/reference1.png" alt="reference1" style="width:100%;height:100%;object-fit:cover;display:block;"/></div>
+      </div>
     </div>
-    <div style="background:rgba(15,23,42,.68);border:1px solid rgba(59,130,246,.28);border-radius:6px;overflow:hidden;display:flex;align-items:center;justify-content:center;padding:0;min-height:0;">
-      <img src="references/reference2.png" alt="reference2" style="width:100%;height:100%;object-fit:cover;display:block;"/>
+
+    <div style="background:rgba(15,23,42,.35);border:1px solid rgba(16,185,129,.25);border-radius:8px;padding:4px;display:grid;grid-template-rows:auto 1fr;gap:4px;min-height:0;">
+      <div style="font-size:12px;font-weight:700;color:#86efac;padding:0 4px;"><i class="fas fa-stream mr-1"></i>이벤트 대응 패턴 참고: 타임라인 · 알림 팝업 · 증거 검토</div>
+      <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px;min-height:0;">
+        <div style="border:1px solid rgba(16,185,129,.3);border-radius:6px;overflow:hidden;min-height:0;"><img src="references/reference5.png" alt="reference5" style="width:100%;height:100%;object-fit:cover;display:block;"/></div>
+        <div style="border:1px solid rgba(16,185,129,.3);border-radius:6px;overflow:hidden;min-height:0;"><img src="references/reference4.png" alt="reference4" style="width:100%;height:100%;object-fit:cover;display:block;"/></div>
+        <div style="border:1px solid rgba(16,185,129,.3);border-radius:6px;overflow:hidden;min-height:0;"><img src="references/reference7.png" alt="reference7" style="width:100%;height:100%;object-fit:cover;display:block;"/></div>
+      </div>
     </div>
-    <div style="background:rgba(15,23,42,.68);border:1px solid rgba(59,130,246,.28);border-radius:6px;overflow:hidden;display:flex;align-items:center;justify-content:center;padding:0;min-height:0;">
-      <img src="references/reference3.png" alt="reference3" style="width:100%;height:100%;object-fit:cover;display:block;"/>
-    </div>
-    <div style="background:rgba(15,23,42,.68);border:1px solid rgba(59,130,246,.28);border-radius:6px;overflow:hidden;display:flex;align-items:center;justify-content:center;padding:0;min-height:0;">
-      <img src="references/reference6.png" alt="reference6" style="width:100%;height:100%;object-fit:cover;display:block;"/>
-    </div>
-    <div style="background:rgba(15,23,42,.68);border:1px solid rgba(59,130,246,.28);border-radius:6px;overflow:hidden;display:flex;align-items:center;justify-content:center;padding:0;min-height:0;">
-      <img src="references/reference5.png" alt="reference5" style="width:100%;height:100%;object-fit:cover;display:block;"/>
-    </div>
-    <div style="background:rgba(15,23,42,.68);border:1px solid rgba(59,130,246,.28);border-radius:6px;overflow:hidden;display:flex;align-items:center;justify-content:center;padding:0;min-height:0;">
-      <img src="references/reference4.png" alt="reference4" style="width:100%;height:100%;object-fit:cover;display:block;"/>
-    </div>
-    <div style="background:rgba(15,23,42,.68);border:1px solid rgba(59,130,246,.28);border-radius:6px;overflow:hidden;display:flex;align-items:center;justify-content:center;padding:0;min-height:0;">
-      <img src="references/reference7.png" alt="reference7" style="width:100%;height:100%;object-fit:cover;display:block;"/>
-    </div>
-    <div style="background:rgba(15,23,42,.68);border:1px solid rgba(59,130,246,.28);border-radius:6px;overflow:hidden;display:flex;align-items:center;justify-content:center;padding:0;min-height:0;">
-      <img src="references/reference8.png" alt="reference8" style="width:100%;height:100%;object-fit:cover;display:block;"/>
-    </div>
-    <div style="background:rgba(15,23,42,.68);border:1px solid rgba(59,130,246,.28);border-radius:6px;overflow:hidden;display:flex;align-items:center;justify-content:center;padding:0;min-height:0;">
-      <img src="references/reference9.png" alt="reference9" style="width:100%;height:100%;object-fit:cover;display:block;"/>
+
+    <div style="background:rgba(15,23,42,.35);border:1px solid rgba(234,179,8,.25);border-radius:8px;padding:4px;display:grid;grid-template-rows:auto 1fr;gap:4px;min-height:0;">
+      <div style="font-size:12px;font-weight:700;color:#fde68a;padding:0 4px;"><i class="fas fa-th-large mr-1"></i>상황판 패턴 참고: 맵 연동 · 통합 패널 · 정보 밀도 최적화</div>
+      <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px;min-height:0;">
+        <div style="border:1px solid rgba(234,179,8,.32);border-radius:6px;overflow:hidden;min-height:0;"><img src="references/reference3.png" alt="reference3" style="width:100%;height:100%;object-fit:cover;display:block;"/></div>
+        <div style="border:1px solid rgba(234,179,8,.32);border-radius:6px;overflow:hidden;min-height:0;"><img src="references/reference8.png" alt="reference8" style="width:100%;height:100%;object-fit:cover;display:block;"/></div>
+        <div style="border:1px solid rgba(234,179,8,.32);border-radius:6px;overflow:hidden;min-height:0;"><img src="references/reference9.png" alt="reference9" style="width:100%;height:100%;object-fit:cover;display:block;"/></div>
+      </div>
     </div>
   </div>
 </div>
@@ -4036,7 +4014,7 @@
 <div class="header">
 <div class="header-title">
 <i class="fas fa-cogs"></i>
-                핵심 기술 의사결정 (Technical Decisions)
+                핵심 기술 결정 사항
             </div>
 <div class="etri-logo-small">ETRI 자율형 IoT 연구실</div>
 </div>
@@ -4420,6 +4398,66 @@
 <div class="page-number">10</div>
 </div>
       </section>
+      <section class="slide" data-index="13">
+<div class="slide-container">
+<div class="bg-grid"></div>
+
+<div class="header">
+<div class="header-title">
+<i class="fas fa-exclamation-circle"></i>
+                프로젝트 한계 및 보완 계획
+            </div>
+<div class="etri-logo-small">ETRI 자율형 IoT 연구실</div>
+</div>
+
+<div class="content-area" style="padding:30px 38px 24px 38px;">
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+    <div style="background:rgba(30,41,59,.45);border:1px solid rgba(59,130,246,.25);border-radius:14px;padding:16px;">
+      <div style="font-size:18px;font-weight:800;color:#93c5fd;display:flex;align-items:center;gap:10px;">
+        <i class="fas fa-robot"></i>자율주행 미적용
+      </div>
+      <div style="margin-top:10px;font-size:14px;color:#cbd5e1;line-height:1.6;">
+        현재 로봇은 <strong>원격 수동 조종</strong> 중심으로 구현되어 있으며,<br/>
+        완전 자율 경로 계획·회피 주행은 향후 과제로 남아 있습니다.
+      </div>
+    </div>
+    <div style="background:rgba(30,41,59,.45);border:1px solid rgba(59,130,246,.25);border-radius:14px;padding:16px;">
+      <div style="font-size:18px;font-weight:800;color:#93c5fd;display:flex;align-items:center;gap:10px;">
+        <i class="fas fa-map-marked-alt"></i>맵 정확도 한계
+      </div>
+      <div style="margin-top:10px;font-size:14px;color:#cbd5e1;line-height:1.6;">
+        현재 맵은 운영 보조용 배치 시각화 수준이며,<br/>
+        실측 좌표 기반 정합/캘리브레이션은 추가 보완이 필요합니다.
+      </div>
+    </div>
+    <div style="background:rgba(30,41,59,.45);border:1px solid rgba(59,130,246,.25);border-radius:14px;padding:16px;">
+      <div style="font-size:18px;font-weight:800;color:#93c5fd;display:flex;align-items:center;gap:10px;">
+        <i class="fas fa-video"></i>스트리밍 안정성 편차
+      </div>
+      <div style="margin-top:10px;font-size:14px;color:#cbd5e1;line-height:1.6;">
+        장치/코덱/네트워크 환경에 따라 간헐적 지연·재연결이 발생할 수 있어<br/>
+        품질 제어 정책과 재연결 로직을 계속 튜닝 중입니다.
+      </div>
+    </div>
+    <div style="background:rgba(30,41,59,.45);border:1px solid rgba(59,130,246,.25);border-radius:14px;padding:16px;">
+      <div style="font-size:18px;font-weight:800;color:#93c5fd;display:flex;align-items:center;gap:10px;">
+        <i class="fas fa-industry"></i>현장 일반화 검증
+      </div>
+      <div style="margin-top:10px;font-size:14px;color:#cbd5e1;line-height:1.6;">
+        단일 실험 환경 중심으로 검증했기 때문에,<br/>
+        다양한 산업 현장에 대한 대규모 실증이 필요합니다.
+      </div>
+    </div>
+  </div>
+
+  <div style="margin-top:14px;background:rgba(15,23,42,.65);border:1px dashed rgba(148,163,184,.35);border-radius:10px;padding:10px 12px;font-size:13px;color:#93c5fd;">
+    보완 방향: 자율주행 경로 계획, 맵 정합 고도화, 스트림 복원성 강화, 다기관 현장 실증 확대
+  </div>
+</div>
+
+<div class="page-number">11</div>
+</div>
+      </section>
       <section class="slide" data-index="9">
 <div class="slide-container">
 <div class="bg-grid"></div>
@@ -4513,7 +4551,7 @@
 </div>
 </div>
 
-<div class="page-number">11</div>
+<div class="page-number">12</div>
 </div>
       </section>
 
@@ -4583,7 +4621,7 @@
 
 <div class="bottom-decoration"></div>
 
-<div class="page-number">12</div>
+<div class="page-number">13</div>
 </div>
       </section>
     </div>
@@ -4682,9 +4720,9 @@
 
       const s4 = document.querySelector('section[data-index="4"]');
       if (s4) {
-        setHTML(s4.querySelector(".header-title"), '<i class="fas fa-random"></i>표준 이벤트 흐름 (Standard Event Flow)');
-        setText(s4.querySelectorAll(".section-header")[0], "이벤트 상태 정의 (Event States)");
-        setText(s4.querySelectorAll(".section-header")[1], "이벤트 처리 절차 (Processing Pipeline)");
+        setHTML(s4.querySelector(".header-title"), '<i class="fas fa-random"></i>표준 이벤트 흐름');
+        setText(s4.querySelectorAll(".section-header")[0], "이벤트 상태 정의");
+        setText(s4.querySelectorAll(".section-header")[1], "이벤트 처리 절차");
         setList(s4, ".status-label", ["DANGER", "SAFE", "CONN / DISCONN", "MONITOR / CONTROL"]);
         setList(s4, ".status-desc", [
           "사람 객체 탐지 시 발생\n즉각적인 알림 및 녹화 트리거",
@@ -4728,7 +4766,7 @@
 
       const s6 = document.querySelector('section[data-index="6"]');
       if (s6) {
-        setHTML(s6.querySelector(".header-title"), '<i class="fas fa-cogs"></i>핵심 기술 의사결정 (Technical Decisions)');
+        setHTML(s6.querySelector(".header-title"), '<i class="fas fa-cogs"></i>핵심 기술 결정 사항');
         const st = s6.querySelectorAll(".section-title");
         const sd = s6.querySelectorAll(".section-desc");
         setText(st[0], "연산(Python) vs I/O(C#) 역할 분리");
@@ -4833,9 +4871,6 @@
     }
     function next() { show(idx + 1); }
     function prev() { show(idx - 1); }
-
-    document.getElementById("btnNext").addEventListener("click", next);
-    document.getElementById("btnPrev").addEventListener("click", prev);
 
     function toggleFullscreen() {
       const el = document.documentElement;
