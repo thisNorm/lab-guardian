@@ -1,0 +1,32 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directories: ["/", "/lab-guardian-backend", "/lab-guardian-web"]
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: Asia/Seoul
+    open-pull-requests-limit: 20
+    groups:
+      all-dependencies:
+        patterns: ["*"]
+  - package-ecosystem: pip
+    directories: ["/lab-guardian-algorithm", "/lab-guardian-robot/raspbot_setup/py_install"]
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: Asia/Seoul
+    open-pull-requests-limit: 20
+    groups:
+      all-dependencies:
+        patterns: ["*"]
+  - package-ecosystem: nuget
+    directory: "/lab-guardian-gateway"
+    schedule:
+      interval: weekly
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
